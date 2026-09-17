@@ -1,0 +1,58 @@
+# ==============================================================================
+#  蔬菜水果图像分类 —— Git 忽略规则
+#  原则：忽略"能自动重建的"和"换台电脑就失效的"，保留"别人拿到就能跑的"。
+# ==============================================================================
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ---------- 虚拟环境 ----------
+.venv/
+venv/
+env/
+ENV/
+
+# ---------- IDE ----------
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ---------- 缓存与配置（自动重建 / 换机失效）----------
+.ultralytics/
+Ultralytics/
+.mplcache/
+dataset/*.cache
+
+# ---------- 训练输出里的噪音 ----------
+runs/**/train_batch*.jpg
+runs/**/val_batch*.jpg
+runs/**/weights/
+runs/classify/
+runs/camera_snapshots/
+runs/camera_test.jpg
+
+# ---------- 操作系统 ----------
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---------- 杂项 ----------
+*.log
+*.tmp
+~$*
+
+# ==============================================================================
+#  以下内容是【故意上传】的，不作忽略：
+#    dataset/                    训练数据 28 MB（别人 clone 下来要能直接训练）
+#    weights/yolo11n-cls.pt      预训练权重 5.5 MB（github.com 域名解析被污染，
+#                                放进仓库省得别人下不来）
+#    models/fruits_cls_v1/       训练成品 best.pt + classes.json（核心产物）
+#    runs/fruits_cls_v1/         训练曲线、混淆矩阵、results.csv、args.yaml
+#    runs/fruits_cls_v1_eval/    中文标签混淆矩阵
+#    *.py / README.md            代码本体
+#  预计仓库体积约 37 MB
+# ==============================================================================
