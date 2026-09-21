@@ -1,369 +1,219 @@
 # -*- coding: utf-8 -*-
 """
-蔬菜水果 12 类图像分类 —— 预测脚本
+图片 / 文件夹 测试脚本
 ================================================================================
 
-【这个脚本干什么】
-
-    加载已经训练好的模型，给它一张图片，告诉你这是什么。
-
-    ★ 它不训练。模型是 train.py 训好、存在 models/ 里的。
-    ★ 它不用摄像头。摄像头在另一个脚本里（那是后面的事）。
-    ★ 它只做一件事：读图 → 推理 → 打印结果。
+【干什么】
+    给模型一张图或一个文件夹，看它认成什么。不训练、不用摄像头。
 
 【怎么用】
+    python predict.py                          测默认目录（见 config.DEFAULT_INPUT）
+    python predict.py "D:\\照片\\柿子.jpg"       测单张
+    python predict.py "D:\\照片\\待测"           测整个文件夹
+    python predict.py -m species "..."          临时换模型
 
-    :: 单张图片
-    python predict.py "D:\\照片\\苹果.jpg"
+【文件夹测试会自动算准确率】
+    如果文件夹里是按类别分的子文件夹（如 dataset_persimmon/val/1_unripe），
+    就逐类统计准确率，并列出判错的图 —— 这是最直观的"模型行不行"的检验。
 
-    :: 整个文件夹（批量，会额外统计准确率）
-    python predict.py "dataset\\val\\苹果"
-
-    :: 不带参数 → 显示用法和几个可以试的例子
-    python predict.py
-
-【产物与依赖】
-
-    模型      models/fruits_cls_v1/best.pt
-    类别表    models/fruits_cls_v1/classes.json
-
-    这两个文件缺一个都不行。模型负责"算"，类别表负责"把算出来的数字翻译成中文"。
-
-【耗时】
-
-    加载模型    约 0.1 秒（只加载一次）
-    每张图推理  约 10 毫秒
+【产物】
+    模型    config.MODELS[ACTIVE_MODEL]["weights"]
+================================================================================
 """
 
-import os
 import sys
-import json
-import math
-import time
 from pathlib import Path
 
-# ==============================================================================
-# 第 0 步：项目路径 + 环境变量（和 train.py 保持一致）
-# ==============================================================================
-ROOT = Path(__file__).resolve().parent
-
-os.environ["YOLO_CONFIG_DIR"] = str(ROOT / ".ultralytics")
-os.environ["MPLCONFIGDIR"] = str(ROOT / ".mplcache")
-
-# ultralytics 会往 YOLO_CONFIG_DIR 下面再套一层 "Ultralytics" 目录，
-# 如果那层目录不存在，它检测到"不可写"就会退回写到项目根目录，
-# 于是项目里凭空多出一个 Ultralytics\ 文件夹。这里先建好，避免这个副作用。
-(ROOT / ".ultralytics" / "Ultralytics").mkdir(parents=True, exist_ok=True)
-(ROOT / ".mplcache").mkdir(parents=True, exist_ok=True)
-
-try:
-    sys.stdout.reconfigure(encoding="utf-8")
-except Exception:
-    pass
-
-# 图表中文（ultralytics 画预测图时会用到，和 train.py 同一套路）
-import matplotlib
-matplotlib.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "SimSun", "DejaVu Sans"]
-matplotlib.rcParams["axes.unicode_minus"] = False
-
-from ultralytics import YOLO
+import config
+import engine
 
 
-# ==============================================================================
-# 预测配置 —— 想改行为就改这里
-# ==============================================================================
-CONFIG = {
-    # 用哪个模型。换模型版本时改这个目录名。
-    "model": ROOT / "models" / "fruits_cls_v1" / "best.pt",
-    "classes": ROOT / "models" / "fruits_cls_v1" / "classes.json",
-
-    # 输入尺寸，必须和训练时一致（不一致会明显掉精度）
-    "imgsz": 224,
-
-    # 打印前几名
-    "topk": 3,
-
-    # ------------------------------------------------------------------------
-    # 【T7 拒识】置信度阈值
-    # ------------------------------------------------------------------------
-    # 模型是"12 选 1 的单选题"，它一定会选一个，数学上没有"以上都不是"的选项。
-    # 所以拿它不认识的东西（猫、手、白墙）去问，它也会硬报一个蔬菜名。
-    #
-    # 这里设一道闸门：最高置信度低于这个值，就输出"未知"，而不是硬猜。
-    #
-    #     0.60  保守，宁可说"不知道"
-    #     0.40  宽松，尽量给答案
-    #     0.00  等于关闭拒识（永远硬猜）
-    #
-    # ⚠️ 诚实提醒：这个办法只在"模型自己也没底"时有效。
-    #    softmax 有过度自信的毛病 —— 对着猫它可能给"苹果 0.95"，那就拦不住。
-    #    真要根治，得加第 13 类"其他"重新训练（需要额外收集几百张干扰图）。
-    "conf_threshold": 0.60,
-}
-
-IMAGE_EXT = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
-
-
-# ==============================================================================
-# 加载模型和类别表
-# ==============================================================================
-def load():
-    """把模型和类别表读进内存。只做一次。"""
-    if not CONFIG["model"].exists():
-        print(f"[错误] 找不到模型文件: {CONFIG['model']}")
-        print(f"       请先运行 train.py 训练模型。")
-        sys.exit(1)
-
-    # 类别表 —— 把模型的数字输出翻译成中文
-    if CONFIG["classes"].exists():
-        with open(CONFIG["classes"], encoding="utf-8") as f:
-            names = json.load(f)["index_to_name"]
-    else:
-        # 没有类别表就退回用模型自带的（一般也够用）
-        print(f"[提示] 没找到 {CONFIG['classes'].name}，改用模型内置类别名")
-        names = None
-
-    t0 = time.time()
-    model = YOLO(str(CONFIG["model"]))
-    load_ms = (time.time() - t0) * 1000
-
-    # 模型自己的类别表是最权威的，优先用
-    model_names = getattr(model, "names", None)
-    if isinstance(model_names, dict):
-        model_names = [model_names[i] for i in sorted(model_names)]
-    if model_names:
-        names = model_names
-
-    print(f"模型已加载  {CONFIG['model'].name}  ({load_ms:.0f} 毫秒)")
-    print(f"类别数      {len(names)}")
-    return model, names
-
-
-# ==============================================================================
-# 核心：对一张图做预测
-# ==============================================================================
-def predict_one(model, names, img_path):
+def pad(s, width):
     """
-    输入一张图，返回一个结果字典。
-
-    返回值：
-        path     图片路径
-        ok       是否被接受（未被拒识）
-        name     预测的类别名（被拒识时是 None）
-        conf     最高置信度
-        topk     [(类别名, 置信度), ...] 前 k 名
-        entropy  分布熵，越低越确定
-        ms       推理耗时（毫秒）
-        error    出错信息（正常时为 None）
+    按【显示宽度】补空格。
+    中文字符占 2 列，str.ljust 按字符数算，会错位。
     """
-    result = {
-        "path": str(img_path),
-        "ok": False,
-        "name": None,
-        "conf": 0.0,
-        "topk": [],
-        "entropy": 0.0,
-        "ms": 0.0,
-        "error": None,
-    }
-
-    try:
-        t0 = time.time()
-        # 推理。模型直接吃文件路径，内部会自动做缩放等预处理。
-        preds = model.predict(source=str(img_path), imgsz=CONFIG["imgsz"], verbose=False)
-        result["ms"] = (time.time() - t0) * 1000
-    except Exception as e:
-        result["error"] = str(e)
-        return result
-
-    probs = preds[0].probs           # 分类任务的概率对象
-    p = probs.data.cpu().numpy()     # 12 个概率值，加起来等于 1
-
-    # 把概率从大到小排序，取前 k 名
-    order = p.argsort()[::-1]
-    result["topk"] = [(names[i], float(p[i])) for i in order[:CONFIG["topk"]]]
-
-    top1_idx = int(order[0])
-    result["conf"] = float(p[top1_idx])
-    result["name"] = names[top1_idx]
-
-    # 分布熵：衡量"这个预测有多犹豫"
-    #   全押一个类 → 接近 0
-    #   12 类平均分 → 2.485（ln 12，最大可能值）
-    result["entropy"] = float(-sum(pi * math.log(pi + 1e-12) for pi in p))
-
-    # ---------------- T7 拒识闸门 ----------------
-    if result["conf"] < CONFIG["conf_threshold"]:
-        result["ok"] = False          # 拒识：不给答案
-    else:
-        result["ok"] = True
-    return result
+    w = sum(2 if ord(c) > 0x2E80 else 1 for c in s)
+    return s + " " * max(0, width - w)
 
 
 # ==============================================================================
-# 把结果打印成人能读的格式
+# 命令行解析
 # ==============================================================================
-def bar(p, width=28):
-    """画一个横向进度条，让结果一眼能看出差距。"""
-    n = int(round(p * width))
-    return "█" * n + "·" * (width - n)
+def parse_args(argv):
+    """
+    返回 (目标路径, 模型key)
+    支持：python predict.py [-m 模型key] [路径]
+    """
+    args = list(argv)
+    key = None
+
+    if "-m" in args:
+        i = args.index("-m")
+        if i + 1 >= len(args):
+            print("[错误] -m 后面要跟模型名，可选：" + " / ".join(config.MODELS))
+            sys.exit(1)
+        key = args[i + 1]
+        del args[i:i + 2]
+
+    target = Path(args[0]) if args else config.get_default_input(key)
+    return target, key
 
 
-def show(result, true_label=None):
-    """打印单张图的预测结果。"""
+# ==============================================================================
+# 打印单张结果
+# ==============================================================================
+def show_one(r, true_label=None):
     print()
-    print("─" * 74)
-    print(f"  图片   {result['path']}")
+    print("─" * 70)
+    print(f"  图片   {r.get('path', '(单帧画面)')}")
     if true_label:
         print(f"  真实   {true_label}")
-    print("─" * 74)
+    print("─" * 70)
 
-    if result["error"]:
-        print(f"  [读图失败] {result['error']}")
+    if r["error"]:
+        print(f"  [失败] {r['error']}")
         return
 
-    if result["ok"]:
+    if r["ok"]:
         mark = "✅"
-        # 如果知道真实答案，顺带标一下对错
         if true_label:
-            mark = "✅" if result["name"] == true_label else "❌"
-        print(f"  {mark} 这是【{result['name']}】    置信度 {result['conf'] * 100:.1f}%")
+            mark = "✅" if r["name"] == true_label else "❌"
+        print(f"  {mark} 【{config.label_of(r['name'])}】    置信度 {r['conf'] * 100:.1f}%")
     else:
-        print(f"  ❓ 【未知】—— 判断为不属于这 12 类")
-        print(f"     最高分只有 {result['conf'] * 100:.1f}%，"
-              f"低于阈值 {CONFIG['conf_threshold'] * 100:.0f}%")
+        print(f"  ❓ 【未知】 最高分只有 {r['conf'] * 100:.1f}%，"
+              f"低于阈值 {config.CONF_THRESHOLD * 100:.0f}%")
 
-    print()
-    print("  详细排名:")
-    for i, (name, p) in enumerate(result["topk"], 1):
-        print(f"     {i}. {name:<8} {bar(p)} {p * 100:5.1f}%")
-
-    print(f"  分布熵 {result['entropy']:.3f}"
-          f"（0 = 非常确定，2.485 = 完全瞎猜）    推理 {result['ms']:.0f} 毫秒")
+    print("\n  排名:")
+    for i, (name, p) in enumerate(r["topk"], 1):
+        n = int(round(p * 26))
+        print(f"     {i}. {pad(config.label_of(name), 18)} {'█' * n}{'·' * (26 - n)} {p * 100:5.1f}%")
+    print(f"\n  推理 {r['ms']:.0f} 毫秒")
 
 
 # ==============================================================================
-# 批量：对整个文件夹预测
+# 批量测试
 # ==============================================================================
-def predict_folder(model, names, folder: Path):
+def test_paths(target: Path, key=None):
     """
-    跑完整个文件夹。
-
-    如果文件夹名恰好是一个已知类别（比如 dataset/val/苹果），
-    就顺带统计准确率 —— 这是最直观的"模型行不行"的检验。
+    target 可以是：
+      1. 一个文件夹，里面直接放图片          -> 只列结果
+      2. 一个文件夹，里面按类别分子文件夹    -> 逐类算准确率
+      3. 单个图片文件                        -> 单张结果
     """
-    files = sorted([f for f in folder.iterdir()
-                    if f.is_file() and f.suffix.lower() in IMAGE_EXT])
-    if not files:
-        print(f"[错误] 这个文件夹里没有图片: {folder}")
+    if target.is_file():
+        r = engine.predict(target, key=key)
+        r["path"] = str(target)
+        show_one(r, true_label=None)
         return
 
-    # 文件夹名是不是一个类别？是的话我们就有"标准答案"可以对
-    true_label = folder.name if folder.name in names else None
-
-    print()
-    print("=" * 74)
-    print(f"  批量预测: {folder}")
-    print(f"  图片数量: {len(files)}")
-    if true_label:
-        print(f"  标准答案: {true_label}  （将统计准确率）")
+    # 判断是"按类别分"还是"平铺"
+    subdirs = [d for d in sorted(target.iterdir()) if d.is_dir()]
+    if subdirs:
+        test_by_class(target, subdirs, key)
     else:
-        print(f"  标准答案: 无（文件夹名不是已知类别，只列结果不打分）")
-    print("=" * 74)
+        test_flat(target, key)
 
-    correct = 0
-    rejected = 0
-    total_ms = 0.0
-    wrong_list = []
 
-    for f in files:
-        r = predict_one(model, names, f)
-        total_ms += r["ms"]
+def test_flat(folder: Path, key=None):
+    files = sorted(f for f in folder.iterdir()
+                   if f.is_file() and f.suffix.lower() in config.IMAGE_EXT)
+    if not files:
+        print(f"[错误] 这个文件夹里没有图片：{folder}")
+        return
 
+    print()
+    print("=" * 70)
+    print(f"  文件夹   {folder}")
+    print(f"  图片数   {len(files)}")
+    print("=" * 70)
+
+    results = engine.predict_paths(files, key=key, verbose=True)
+    for f, r in zip(files, results):
         if r["error"]:
-            print(f"  [读图失败] {f.name}: {r['error']}")
+            print(f"  [失败] {f.name}: {r['error']}")
             continue
+        tag = "  " if r["ok"] else "❓"
+        name = config.label_of(r["name"]) if r["ok"] else "未知"
+        print(f"  {tag} {f.name:<34} -> {name:<14} {r['conf'] * 100:5.1f}%")
 
-        if not r["ok"]:
-            rejected += 1
-            tag = "❓未知"
-        elif true_label:
-            if r["name"] == true_label:
-                correct += 1
-                tag = "✅"
-            else:
-                tag = "❌"
-                wrong_list.append((f.name, r["name"], r["conf"]))
-        else:
-            tag = "  "
+    ms = sum(r["ms"] for r in results) / max(len(results), 1)
+    print(f"\n  平均 {ms:.0f} 毫秒/张")
 
-        line = f"  {tag} {f.name:<28} -> {r['name']:<8} {r['conf'] * 100:5.1f}%"
-        print(line)
 
+def test_by_class(folder: Path, subdirs, key=None):
     print()
-    print("─" * 74)
-    print(f"  平均单张耗时   {total_ms / max(len(files), 1):.0f} 毫秒")
-    if true_label:
-        print(f"  准确率         {correct}/{len(files)} = {correct / len(files) * 100:.2f}%")
-        if rejected:
-            print(f"  被拒识         {rejected} 张（判为未知）")
-        if wrong_list:
-            print(f"  判错的 {len(wrong_list)} 张:")
-            for fn, pred, c in wrong_list:
-                print(f"      {fn:<28} 误判为 {pred}  ({c * 100:.1f}%)")
+    print("=" * 70)
+    print(f"  类别测试   {folder}")
+    print("=" * 70)
 
+    total = correct = rejected = 0
+    wrong = []
 
-# ==============================================================================
-# 没给参数时：显示用法 + 给几个现成的例子
-# ==============================================================================
-def show_usage():
-    print(__doc__)
-    print("=" * 74)
-    print("  下面这些图片可以直接复制去试（都是模型没见过的验证集图片）:")
-    print("=" * 74)
-    shown = 0
-    val_dir = ROOT / "dataset" / "val"
-    if val_dir.is_dir():
-        for cls_dir in sorted(val_dir.iterdir()):
-            if not cls_dir.is_dir():
+    for cls_dir in subdirs:
+        files = sorted(f for f in cls_dir.iterdir()
+                       if f.is_file() and f.suffix.lower() in config.IMAGE_EXT)
+        if not files:
+            continue
+        results = engine.predict_paths(files, key=key, verbose=False)
+        c = 0
+        for f, r in zip(files, results):
+            if r["error"]:
                 continue
-            imgs = sorted([f for f in cls_dir.iterdir()
-                           if f.is_file() and f.suffix.lower() in IMAGE_EXT])
-            if imgs:
-                print(f'    python predict.py "{imgs[0]}"')
-                shown += 1
-                if shown >= 5:
-                    break
-    print()
-    print('  或者跑一整个类别（会统计准确率）:')
-    print(f'    python predict.py "{val_dir / "苹果"}"')
+            if not r["ok"]:
+                rejected += 1
+            elif r["name"] == cls_dir.name:
+                c += 1
+            else:
+                wrong.append((f.name, cls_dir.name, r["name"], r["conf"]))
+        total += len(files)
+        correct += c
+        print(f"  {pad(config.label_of(cls_dir.name), 18)} {c:>4}/{len(files):<4} "
+              f"{c / len(files) * 100:6.2f}%")
+
+    if not total:
+        print("  （没有可用图片）")
+        return
+
+    print("─" * 70)
+    print(f"  {'总体准确率':<18} {correct:>4}/{total:<4} {correct / total * 100:6.2f}%")
+    if rejected:
+        print(f"  被拒识（判为未知）  {rejected} 张")
+
+    if wrong:
+        print(f"\n  判错的 {len(wrong)} 张：")
+        for fn, true_n, pred_n, c in wrong[:20]:
+            print(f"    {fn:<32} 真实 {pad(config.label_of(true_n), 16)} "
+                  f"误判为 {pad(config.label_of(pred_n), 16)} {c * 100:5.1f}%")
+        if len(wrong) > 20:
+            print(f"    ... 还有 {len(wrong) - 20} 张")
 
 
 # ==============================================================================
 # 主流程
 # ==============================================================================
 def main():
-    model, names = load()
+    target, key = parse_args(sys.argv[1:])
 
-    # ---- 情况 1：没给参数 ----
-    if len(sys.argv) < 2:
-        show_usage()
-        return 0
+    info = config.get_model_info(key)
+    print("=" * 70)
+    print(f"  模型      {info['label']}   ({info['key']})")
+    print(f"  权重      {info['weights']}")
+    print("=" * 70)
 
-    target = Path(sys.argv[1])
-
-    # ---- 情况 2：路径不存在 ----
-    if not target.exists():
-        print(f"\n[错误] 路径不存在: {target}")
+    if not engine.is_ready(key):
+        print(f"\n[错误] 模型文件不存在，请先训练或把 best.pt 放到：")
+        print(f"       {info['weights'].parent}")
         return 1
 
-    # ---- 情况 3：文件夹（批量）----
-    if target.is_dir():
-        predict_folder(model, names, target)
-        return 0
+    # 加载一次（后面走缓存）
+    engine.load_model(key, verbose=True)
 
-    # ---- 情况 4：单张图片 ----
-    show(predict_one(model, names, target))
+    if not target.exists():
+        print(f"\n[错误] 路径不存在：{target}")
+        return 1
+
+    test_paths(target, key)
     return 0
 
 

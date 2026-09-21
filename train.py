@@ -115,7 +115,8 @@ CONFIG = {
     "weights": ROOT / "weights" / "yolo11n-cls.pt",
 
     # 数据集根目录：里面必须有 train/ 和 val/ 两个子目录，各自按类别分文件夹
-    "data": ROOT / "dataset",
+    # "data": ROOT / "dataset",
+    "data": ROOT / "dataset_persimmon",
 
     # 训练轮数。一"轮"(epoch) = 把 841 张训练图完整看一遍。
     # 50 轮对这个规模足够了。想更保险可以改 100，代价是时间翻倍。
@@ -141,7 +142,8 @@ CONFIG = {
     #   runs/fruits_cls_v1/      训练过程与日志
     #   models/fruits_cls_v1/    归档的最终产物
     # 下次换数据重训，改成 fruits_cls_v2 就能并存，不会覆盖。
-    "name": "fruits_cls_v1",
+    # "name": "fruits_cls_v1",
+    "name": "fruits_cls_v2",
 
     # 随机水平翻转的概率（数据增强）。
     # 苹果左右翻转还是苹果，所以可以放开来用。0.5 是常用值。
