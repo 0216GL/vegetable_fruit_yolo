@@ -31,7 +31,9 @@ dataset/**/*.cache
 # dataset/dataset_persimmon/ 约 191 MB（平均 888 KB/张，手机截图 + 实拍原图），
 # 提交后 clone 会很慢，所以排除。
 # ⚠️ 原始分类图片（源目录 images/）已不在本机，此数据集【无法再重建】，勿删。
-dataset/dataset_persimmon/
+# 注意：只忽略图片本身，保留 classes.txt（标签编号顺序，体积可忽略）
+dataset/dataset_persimmon/*
+!dataset/dataset_persimmon/classes.txt
 images/
 
 # ---------- 训练输出里的噪音 ----------
