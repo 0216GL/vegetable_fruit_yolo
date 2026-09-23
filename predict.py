@@ -13,7 +13,7 @@
     python predict.py -m species "..."          临时换模型
 
 【文件夹测试会自动算准确率】
-    如果文件夹里是按类别分的子文件夹（如 dataset_persimmon/val/1_unripe），
+    如果文件夹里是按类别分的子文件夹（如 dataset/dataset_persimmon/val/1_unripe），
     就逐类统计准确率，并列出判错的图 —— 这是最直观的"模型行不行"的检验。
 
 【产物】
