@@ -1,24 +1,12 @@
-# -*- coding: utf-8 -*-
 """
-图片 / 文件夹 测试脚本
-================================================================================
+图片 / 文件夹 测试脚本。
 
-【干什么】
-    给模型一张图或一个文件夹，看它认成什么。不训练、不用摄像头。
+    python predict.py                       测默认目录（当前模型的 val）
+    python predict.py "D:\\照片\\柿子.jpg"    测单张
+    python predict.py "D:\\照片\\待测"        测整个文件夹
+    python predict.py -m species "..."      临时换模型
 
-【怎么用】
-    python predict.py                          测默认目录（见 config.DEFAULT_INPUT）
-    python predict.py "D:\\照片\\柿子.jpg"       测单张
-    python predict.py "D:\\照片\\待测"           测整个文件夹
-    python predict.py -m species "..."          临时换模型
-
-【文件夹测试会自动算准确率】
-    如果文件夹里是按类别分的子文件夹（如 dataset/dataset_persimmon/val/1_unripe），
-    就逐类统计准确率，并列出判错的图 —— 这是最直观的"模型行不行"的检验。
-
-【产物】
-    模型    config.MODELS[ACTIVE_MODEL]["weights"]
-================================================================================
+文件夹里如果按类别分了子文件夹，会自动逐类算准确率并列出判错的图。
 """
 
 import sys
@@ -29,35 +17,9 @@ import engine
 
 
 def pad(s, width):
-    """
-    按【显示宽度】补空格。
-    中文字符占 2 列，str.ljust 按字符数算，会错位。
-    """
+    """按【显示宽度】补空格 —— 中文占 2 列，str.ljust 会错位。"""
     w = sum(2 if ord(c) > 0x2E80 else 1 for c in s)
     return s + " " * max(0, width - w)
-
-
-# ==============================================================================
-# 命令行解析
-# ==============================================================================
-def parse_args(argv):
-    """
-    返回 (目标路径, 模型key)
-    支持：python predict.py [-m 模型key] [路径]
-    """
-    args = list(argv)
-    key = None
-
-    if "-m" in args:
-        i = args.index("-m")
-        if i + 1 >= len(args):
-            print("[错误] -m 后面要跟模型名，可选：" + " / ".join(config.MODELS))
-            sys.exit(1)
-        key = args[i + 1]
-        del args[i:i + 2]
-
-    target = Path(args[0]) if args else config.get_default_input(key)
-    return target, key
 
 
 # ==============================================================================
@@ -82,7 +44,7 @@ def show_one(r, true_label=None):
         print(f"  {mark} 【{config.label_of(r['name'])}】    置信度 {r['conf'] * 100:.1f}%")
     else:
         print(f"  ❓ 【未知】 最高分只有 {r['conf'] * 100:.1f}%，"
-              f"低于阈值 {config.CONF_THRESHOLD * 100:.0f}%")
+              f"低于阈值 {r['threshold'] * 100:.0f}%")
 
     print("\n  排名:")
     for i, (name, p) in enumerate(r["topk"], 1):
@@ -95,19 +57,13 @@ def show_one(r, true_label=None):
 # 批量测试
 # ==============================================================================
 def test_paths(target: Path, key=None):
-    """
-    target 可以是：
-      1. 一个文件夹，里面直接放图片          -> 只列结果
-      2. 一个文件夹，里面按类别分子文件夹    -> 逐类算准确率
-      3. 单个图片文件                        -> 单张结果
-    """
+    """单张图片 -> 单张结果；按类别分的文件夹 -> 逐类准确率；平铺的 -> 只列结果"""
     if target.is_file():
         r = engine.predict(target, key=key)
         r["path"] = str(target)
         show_one(r, true_label=None)
         return
 
-    # 判断是"按类别分"还是"平铺"
     subdirs = [d for d in sorted(target.iterdir()) if d.is_dir()]
     if subdirs:
         test_by_class(target, subdirs, key)
@@ -193,7 +149,8 @@ def test_by_class(folder: Path, subdirs, key=None):
 # 主流程
 # ==============================================================================
 def main():
-    target, key = parse_args(sys.argv[1:])
+    key, args = config.take_model_arg(sys.argv[1:])
+    target = Path(args[0]) if args else config.get_default_input(key)
 
     info = config.get_model_info(key)
     print("=" * 70)
@@ -206,8 +163,7 @@ def main():
         print(f"       {info['weights'].parent}")
         return 1
 
-    # 加载一次（后面走缓存）
-    engine.load_model(key, verbose=True)
+    engine.load_model(key, verbose=True)      # 加载一次，后面走缓存
 
     if not target.exists():
         print(f"\n[错误] 路径不存在：{target}")

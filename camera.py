@@ -1,42 +1,13 @@
-# -*- coding: utf-8 -*-
 """
-摄像头实时识别
-================================================================================
+摄像头实时识别。
 
-【干什么】
-    打开摄像头，实时识别画面里的东西并显示在屏幕上。
+    python camera.py                用 config.CAMERA["index"]
+    python camera.py 1              临时指定摄像头编号
+    python camera.py -m species     临时换模型
+    python camera.py --test         自检（不弹窗口，排障用）
 
-【怎么运行】
-    PyCharm 里点绿三角
-    或命令行： python camera.py          用 config.CAMERA["index"]
-              python camera.py 1        临时指定摄像头编号
-              python camera.py -m species   临时换模型
+键盘：q 退出   s 存图（runs/camera_snapshots/）   + / - 调置信度阈值
 
-【键盘】
-    q        退出
-    s        存当前画面（存到 runs/camera_snapshots/）
-    + / -    调置信度阈值（实时生效，屏幕右下角显示当前值）
-
-【画面长什么样】
-    ┌──────────────────────────────────────┐
-    │  3_coloring  91.2%                    │  ← 主结果
-    │  1. 3_coloring  91.2%                 │  ← 前三名
-    │  2. 4_full       6.1%                 │
-    │  3. 2_turning    2.3%                 │
-    │                                       │
-    │         （摄像头画面）                  │
-    │                                       │
-    │  阈值 0.60      FPS 24.1      推理 28ms │  ← 状态栏
-    └──────────────────────────────────────┘
-
-【两个重要说明】
-
-    ⚠️ 分类模型回答"整张图是什么"，不是"东西在哪"。
-       所以画面里没有框，只有左上角几行字。要框得另训检测模型。
-
-    ⚠️ 演示效果小技巧：把柿子放在白纸/白盘子上，或者让柿子占满画面中央。
-       因为模型在"果实占主体"的图上训练过，这样识别最准。
-================================================================================
 """
 
 import sys
@@ -53,7 +24,7 @@ import engine
 
 
 # ==============================================================================
-# 中文字体
+# 中文字体（OpenCV 的 putText 不认中文，得借 PIL + 字体文件）
 # ==============================================================================
 FONT_CANDIDATES = [
     r"C:\Windows\Fonts\msyh.ttc",
@@ -64,7 +35,6 @@ FONT_CANDIDATES = [
 
 
 def find_font(size):
-    """OpenCV 的 putText 不认中文，得借 PIL + 字体文件。"""
     for path in FONT_CANDIDATES:
         if Path(path).exists():
             try:
@@ -77,7 +47,6 @@ def find_font(size):
 def put_chinese(frame, items, font):
     """
     在 OpenCV 的 BGR 画面上写中文。
-
     items: [(文字, (x, y), (B, G, R), 是否加黑底), ...]
     """
     img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
@@ -105,15 +74,10 @@ C_DIM = (170, 170, 170)
 
 
 # ==============================================================================
-# 主循环
+# 自检模式（不弹窗口）
 # ==============================================================================
 def self_check(index=None, key=None):
-    """
-    自检模式（不弹窗口）：打开摄像头、抓一帧、跑一次推理、打印结果。
-
-    用途：摄像头弹不出窗口时，先用这个确认"到底是摄像头的问题还是 GUI 的问题"。
-    用法：python camera.py --test
-    """
+    """摄像头弹不出窗口时，先用这个确认是摄像头的问题还是 GUI 的问题。"""
     cam = dict(config.CAMERA)
     if index is not None:
         cam["index"] = int(index)
@@ -191,31 +155,26 @@ def self_check(index=None, key=None):
     return 0
 
 
+# ==============================================================================
+# 实时识别主循环
+# ==============================================================================
 def run(index=None, key=None):
-    """
-    打开摄像头并进入识别循环。
-
-    index  摄像头编号，None = config.CAMERA["index"]
-    key    模型 key，None = config.ACTIVE_MODEL
-    """
     cam = dict(config.CAMERA)
     if index is not None:
         cam["index"] = int(index)
 
     info = config.get_model_info(key)
-    threshold = config.CONF_THRESHOLD
+    threshold = info["threshold"]        # 用该模型自己的阈值，别用全局的
 
-    # ---- 加载模型 ----
     print("=" * 70)
     print(f"  模型      {info['label']}   ({info['key']})")
     print("=" * 70)
     try:
-        _, names, _ = engine.load_model(key, verbose=True)
+        engine.load_model(key, verbose=True)
     except Exception as e:
         print(f"\n[错误] {e}")
         return 1
 
-    # ---- 打开摄像头 ----
     cap = cv2.VideoCapture(cam["index"])
     if not cap.isOpened():
         print(f"\n[错误] 打不开摄像头 {cam['index']} 号。可能原因：")
@@ -251,7 +210,6 @@ def run(index=None, key=None):
         if cam["mirror"]:
             frame = cv2.flip(frame, 1)
 
-        # ---- 推理 ----
         r = engine.predict(frame, key=key, threshold=threshold, verbose=False)
         frames += 1
         total_ms += r["ms"]
@@ -304,7 +262,6 @@ def run(index=None, key=None):
             threshold = max(0.0, round(threshold - 0.05, 2))
             print(f"阈值 -> {threshold:.2f}")
 
-    # ---- 收尾 ----
     cap.release()
     cv2.destroyAllWindows()
 
@@ -320,22 +277,13 @@ def run(index=None, key=None):
 # ==============================================================================
 def main():
     args = sys.argv[1:]
-    key = None
-    index = None
-    test = False
-
-    if "--test" in args:
-        test = True
+    test = "--test" in args
+    if test:
         args.remove("--test")
 
-    if "-m" in args:
-        i = args.index("-m")
-        if i + 1 >= len(args):
-            print("[错误] -m 后面要跟模型名，可选：" + " / ".join(config.MODELS))
-            return 1
-        key = args[i + 1]
-        del args[i:i + 2]
+    key, args = config.take_model_arg(args)
 
+    index = None
     if args:
         try:
             index = int(args[0])
