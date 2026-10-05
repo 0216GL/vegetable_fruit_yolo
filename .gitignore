@@ -81,8 +81,8 @@ Desktop.ini
 #                                        划分已固定，属一次性产物，源图已丢失，不可重建
 #    runs/                               **不是整个目录都不上传**。只忽略上面列出的那几类噪音：
 #                                        train_batch*.jpg / val_batch*.jpg / **/weights/ /
-#                                        classify/ / predict*/
+#                                        classify/ / predict*/ / camera_snapshots/ / camera_test.jpg
 #                                        其余【会上传】：训练曲线（results.png、results.csv）、
-#                                        混淆矩阵、PR/F1 曲线、detect/*/、
+#                                        混淆矩阵（`runs/classify/` 下的那 2 张除外，见上）、PR/F1 曲线、detect/*/、
 #                                        detect_predict/*_det.jpg
 # ==============================================================================

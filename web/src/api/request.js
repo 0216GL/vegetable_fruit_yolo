@@ -52,7 +52,7 @@ request.interceptors.response.use(
 
     // 后端约定 code === 0 才是成功。
     // 注意：业务失败走的也是 HTTP 200，这是国内项目的主流做法
-    // （见 java-backend 的 GlobalExceptionHandler 注释），所以这里必须判 code。
+    // （见 persimmon/ 的 GlobalExceptionHandler 注释），所以这里必须判 code。
     if (body?.code !== 0) {
       const message = body?.message || '请求失败'
       ElMessage.error(message)

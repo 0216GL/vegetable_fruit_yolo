@@ -28,7 +28,7 @@ YOLO('models/persimmon_cls_v1/best.pt').val(data='dataset/dataset_persimmon', sp
 `runs/persimmon_cls_v1/args.yaml` 里存的就是修正后的参数。
 
 > ⚠️ **下面第 7 节里那份"逐类准确率"是按旧的 84.44% 算的，同样作废。**
-> 需要重新从新的混淆矩阵读（`runs/classify/val-2/confusion_matrix.png`）。
+> 需要重新从新的混淆矩阵读（`runs/persimmon_cls_v1/confusion_matrix_2026-10-05.png`）。
 >
 > **材料里请一律用 88.89%，不要再用 84.44%。**
 
@@ -168,8 +168,9 @@ YOLO('models/persimmon_cls_v1/best.pt').val(data='dataset/dataset_persimmon', sp
 | 着色期 | ~88% |
 | 完熟 | ~85% |
 
-> 想要准确值，需要**非归一化的原始计数矩阵**（`runs/classify/val-2/` 下可能还有一张
-> 不带 Normalized 的 `confusion_matrix.png`），或者用 `metrics.confusion_matrix.matrix` 直接读。
+> 想要准确值，需要**非归一化的原始计数矩阵**：`runs/persimmon_cls_v1/confusion_matrix_2026-10-05.png`
+> （同一目录下还有归一化版 `confusion_matrix_normalized_2026-10-05.png`），
+> 或者用 `metrics.confusion_matrix.matrix` 直接读。
 
 ### ★★★ 最重要的一处更正：那个"最大问题"已经被修好了
 

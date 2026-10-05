@@ -85,8 +85,8 @@ D:\Anaconda\envs\yolo\python.exe -m uvicorn ai.server.app:app --host 0.0.0.0 --p
 ```
 
 ```bat
-cd /d D:\vegetable_fruit_yolo\java-backend
-mvn spring-boot:run         :: Java 业务后端，8080
+cd /d D:\vegetable_fruit_yolo\persimmon
+mvnw spring-boot:run         :: Java 业务后端，8080
 ```
 
 前端不直接连 8001 —— 它只跟 Java 说话，AI 服务对前端是透明的。
