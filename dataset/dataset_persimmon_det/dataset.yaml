@@ -1,0 +1,7 @@
+# 柿子检测数据集（第一层：只找柿子，不判成熟度）
+# 成熟度由第二层的分类模型判断：models/persimmon_cls_v1/best.pt
+path: D:/vegetable_fruit_yolo/dataset/dataset_persimmon_det
+train: images/train
+val: images/val
+names:
+  0: persimmon

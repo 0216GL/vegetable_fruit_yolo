@@ -1,0 +1,148 @@
+/* ============================================================================
+   基础层：重置 + 中文排版基线 + 浏览器自带部分
+   ============================================================================
+   这一层不定义任何"设计"，只做两件事：
+     1. 把各浏览器的默认差异抹平
+     2. 接管那些【你没画、但用户天天看到】的浏览器自带元素
+
+   ⚠️ 第 2 件事是最容易被忽略的。impeccable 的原话：
+      "这是判断一个页面是被建造的、还是被拼装的，最便宜的信号，
+       也是模型最稳定会漏的一条。"
+      指的是：文字选中色、光标、滚动条、焦点环、下划线的偏移、
+      表格里数字的字形。这些都不是你画的，但用户每天在看。
+   ============================================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-cn);
+  font-size: var(--fs-body);
+  /* 中文正文用 1.6，1.5 对中文偏挤 */
+  line-height: var(--lh-body);
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  /* 让字在高分屏上更清晰；同时禁用子像素渲染以免动画时字重跳变 */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  line-height: var(--lh-title);
+  /* 标题不做斜体、不做渐变文字；强调只靠字重和字号 */
+  font-weight: 600;
+}
+
+p { margin: 0; }
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* 可点击的东西都要有 pointer，别让用户猜 */
+a, [role="button"] {
+  cursor: pointer;
+}
+
+/* ============================================================================
+   浏览器自带部分 —— 逐个接管
+   ============================================================================ */
+
+/* ---- 文字选中色 ----
+   默认是一片蓝，和我们的配色打架。 */
+::selection {
+  background: var(--color-ripeness-1);
+  color: var(--color-text-inverse);
+}
+
+/* ---- 焦点环 ----
+   ⚠️ 绝对不许去掉。键盘用户完全靠它导航。
+      要做的是让它好看，不是让它消失。 */
+:focus-visible {
+  outline: 2px solid var(--color-ripeness-3);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* 鼠标点击时不显示焦点环（只有键盘导航才显示） */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ---- 滚动条 ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+}
+
+/* ============================================================================
+   两个工具类
+   ============================================================================ */
+
+/* 数字等宽。
+   为什么重要：不等宽的数字在数值变化时会左右跳动，表格和计数器上尤其明显。
+   凡是显示数量、百分比、坐标的地方都该加这个类。 */
+.tnum {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 只给读屏软件的文字（做无障碍时用，比如给纯图标按钮补说明） */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============================================================================
+   减少动态效果
+   ============================================================================
+   用户在系统里开了"减少动态效果"，通常是因为动画会让他们不适。
+   这不是偏好，是需求。必须尊重。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -34,7 +34,6 @@ dataset/**/*.cache
 # 注意：只忽略图片本身，保留 classes.txt（标签编号顺序，体积可忽略）
 dataset/dataset_persimmon/*
 !dataset/dataset_persimmon/classes.txt
-images/
 
 # ---------- 实地采集的原始照片：不进仓库 ----------
 # 2026-10-04 太行山采集的手机原图，单张 3-5 MB、100 多张，
@@ -67,7 +66,7 @@ Desktop.ini
 
 # ==============================================================================
 #  以下内容是【故意上传】的，不作忽略：
-#    dataset/dataset_fruit&&vegetable/   物种数据集 28 MB（12 类，clone 下来要能直接训练）
+#    dataset/dataset_fruit_vegetable/   物种数据集 28 MB（12 类，clone 下来要能直接训练）
 #    weights/yolo11n-cls.pt              预训练权重 5.5 MB（github.com 域名解析被污染，
 #                                        放进仓库省得别人下不来）
 #    models/fruits_cls_v1/best.pt        物种模型（97.95%）

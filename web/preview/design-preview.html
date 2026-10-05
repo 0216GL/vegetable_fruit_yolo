@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>前端设计预览 · 柿子成熟度检测系统</title>
+<style>
+/* ==========================================================================
+   这个文件是【静态设计预览】，不是真正的应用。
+   --------------------------------------------------------------------------
+   目的：让你不装 Node、不跑 npm 也能看到界面长什么样。
+   真正的应用在 web/ 目录，是 Vue 写的。
+
+   令牌值是从 web/src/styles/primitives.css 抄过来的，保持一致。
+   注意：数字字体 Barlow 在离线预览里加载不了，会退到系统字体。
+   真正跑起来时数字是 Barlow（偏窄、方正的工业字形）。
+   ========================================================================== */
+
+:root {
+  /* ---- 原始令牌（抄自 primitives.css）---- */
+  --paper: #f2f4ee;
+  --white: #ffffff;
+  --ink: #1a1f16;
+  --ink-2: #5c6653;
+  --rule: #dde3d5;
+
+  --hue-unripe: #7a8c33;
+  --hue-turning: #9c7a14;
+  --hue-coloring: #c4631f;
+  --hue-full: #9e2c21;
+
+  --bark: #151a13;
+  --bark-2: #20281c;
+  --bark-rule: #2e3a26;
+  --ink-on-dark: #ede9dd;
+  --ink-2-on-dark: #9aa48c;
+
+  --hue-unripe-d: #93a83f;
+  --hue-turning-d: #d6b23c;
+  --hue-coloring-d: #e07b33;
+  --hue-full-d: #cf4436;
+
+  /* ---- 语义令牌 ---- */
+  --color-surface: var(--paper);
+  --color-surface-raised: var(--white);
+  --color-text-primary: var(--ink);
+  --color-text-secondary: var(--ink-2);
+  --color-border: var(--rule);
+  --color-ripeness-1: var(--hue-unripe);
+  --color-ripeness-2: var(--hue-turning);
+  --color-ripeness-3: var(--hue-coloring);
+  --color-ripeness-4: var(--hue-full);
+
+  --font-cn: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 40px 24px 80px;
+  background: #e8eae4;
+  font-family: var(--font-cn);
+  color: var(--ink);
+  line-height: 1.6;
+}
+
+.page-head {
+  max-width: 1400px;
+  margin: 0 auto 32px;
+}
+
+.page-head h1 { font-size: 24px; margin: 0 0 6px; font-weight: 600; }
+.page-head p { margin: 0; color: var(--ink-2); font-size: 14px; }
+
+.stage {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+/* 展示顺序：大屏 → 结果页 → 上传页
+   （叙事顺序：先看整体，再看产出，最后看入口。
+     用 order 而不是调整 DOM，是为了让源码里的阅读顺序保持"用户走的流程"。） */
+.stage > div:nth-child(1) { order: 3; }
+.stage > div:nth-child(2) { order: 2; }
+.stage > div:nth-child(3) { order: 1; }
+
+.frame-label {
+  font-size: 13px;
+  color: var(--ink-2);
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.frame-label span { font-weight: 400; }
+
+/* ---- 手机外框 ---- */
+.phone {
+  width: 375px;
+  height: 760px;
+  background: var(--color-surface);
+  border: 1px solid #c9cec2;
+  border-radius: 22px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 24px rgba(0,0,0,.08);
+}
+
+.phone-inner {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ---- 大屏外框 ---- */
+.screen {
+  width: 100%;
+  max-width: 1280px;
+  aspect-ratio: 16 / 9;
+  background: var(--bark);
+  color: var(--ink-on-dark);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 28px;
+  gap: 22px;
+  box-shadow: 0 4px 24px rgba(0,0,0,.18);
+}
+
+/* ================= 通用 ================= */
+h1.title { font-size: 26px; margin: 0; font-weight: 600; line-height: 1.3; }
+.sub { font-size: 14px; color: var(--color-text-secondary); margin: 4px 0 0; }
+h2.block-title { font-size: 20px; margin: 0 0 12px; font-weight: 600; }
+
+.btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-primary { background: var(--color-text-primary); color: var(--color-surface); }
+.btn-secondary {
+  background: var(--color-surface-raised);
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+.btn-block { width: 100%; }
+
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* ================= 上传页 ================= */
+.picker-placeholder {
+  aspect-ratio: 4 / 3;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.picker-actions { display: flex; gap: 8px; margin-top: 12px; }
+
+.field { display: flex; flex-direction: column; gap: 8px; }
+.field label { font-size: 14px; color: var(--color-text-secondary); }
+.field input {
+  min-height: 44px;
+  padding: 0 12px;
+  font: inherit;
+  color: var(--color-text-primary);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.submit-zone { margin-top: auto; }
+
+/* ================= 结果页 ================= */
+.photo-wrap {
+  position: relative;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--color-border);
+}
+.photo-wrap svg { display: block; width: 100%; height: auto; }
+
+/* 标注框：绝对定位，用百分比 —— 这就是 AnnotatedImage.vue 的核心做法 */
+.box {
+  position: absolute;
+  border: 2px solid;
+  box-sizing: border-box;
+}
+.box .lb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 1px 4px;
+  border-radius: 2px 0 2px 0;
+  color: #fff;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.verdict-main { font-size: 40px; font-weight: 600; line-height: 1.1; margin: 0; }
+.verdict-sub { font-size: 14px; color: var(--color-text-secondary); margin: 4px 0 0; }
+.verdict-note { font-size: 12px; color: var(--color-text-secondary); margin: 4px 0 0; }
+
+/* ---- 色带 ---- */
+.band {
+  display: flex;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+.band i { height: 100%; display: block; }
+
+.legend {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 16px;
+}
+.legend li { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.legend .sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.legend .nm { color: var(--color-text-secondary); }
+.legend .ct { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---- 逐果清单 ---- */
+.fruit-list { list-style: none; margin: 0; padding: 0; }
+.fruit-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+  min-height: 44px;
+  font-size: 14px;
+}
+.fruit-list li:last-child { border-bottom: none; }
+.fruit-list .idx { color: var(--color-text-secondary); font-size: 12px; min-width: 1.6em; }
+.fruit-list .dc { margin-left: auto; color: var(--color-text-secondary); font-size: 12px; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.badge .dot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+.badge .cf { color: var(--color-text-secondary); font-size: 12px; }
+
+.meta {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.meta .k { display: inline-block; min-width: 4em; }
+.meta .dim { font-size: 12px; line-height: 1.6; margin: 0; }
+
+/* ================= 大屏 ================= */
+.scr-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--bark-rule);
+}
+.scr-top .nm { font-size: 20px; letter-spacing: .02em; }
+.scr-top .src { font-size: 14px; color: var(--ink-2-on-dark); }
+
+.scr-body {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
+}
+
+.scr-hero { min-height: 0; }
+.scr-hero .photo-wrap { background: #0e120c; }
+
+.scr-rail { display: flex; flex-direction: column; gap: 24px; }
+.scr-rail .lbl { font-size: 14px; color: var(--ink-2-on-dark); margin: 0; }
+.scr-rail .rate {
+  font-size: 96px;
+  line-height: 1;
+  font-weight: 600;
+  margin: 8px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.scr-rail .rate small { font-size: 32px; margin-left: 2px; }
+.scr-rail .note { font-size: 12px; color: var(--ink-2-on-dark); margin: 8px 0 0; }
+.scr-rail .div { height: 1px; background: var(--bark-rule); }
+.scr-rail .total { margin: 12px 0 0; font-size: 14px; color: var(--ink-2-on-dark); }
+
+/* 大屏上的色带图例用深色面的文字色 */
+.scr-rail .legend .nm { color: var(--ink-2-on-dark); }
+.scr-rail .band { border-color: var(--bark-rule); }
+
+.note-strip {
+  max-width: 1400px;
+  margin: 32px auto 0;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+.note-strip strong { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>前端设计预览</h1>
+  <p>静态预览页，不是真正的应用。真正的实现在 <code>web/</code> 目录（Vue 3）。</p>
+</div>
+
+<div class="stage">
+
+  <!-- ============================================================
+       手机端 · 上传页
+       ============================================================ -->
+  <div>
+    <div class="frame-label">手机端 · 上传页 <span>（/h5）</span></div>
+    <div class="phone">
+      <div class="phone-inner">
+        <div>
+          <h1 class="title">柿子成熟度检测系统</h1>
+          <p class="sub">拍一张果园照片，看看现在能不能采</p>
+        </div>
+
+        <div>
+          <div class="picker-placeholder">还没有选照片</div>
+          <div class="picker-actions">
+            <button class="btn btn-secondary">选择照片</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>地块（可不填）</label>
+          <input type="text" placeholder="例如：东坡地">
+        </div>
+
+        <div class="submit-zone">
+          <button class="btn btn-primary btn-block">开始识别</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       手机端 · 结果页
+       ============================================================ -->
+  <div>
+    <div class="frame-label">手机端 · 结果页 <span>（/h5/result）</span></div>
+    <div class="phone">
+      <div class="phone-inner" style="gap:18px; overflow-y:auto;">
+
+        <!-- 标注图：用 SVG 画示意图，因为预览页里没有真实照片 -->
+        <div class="photo-wrap">
+          <svg viewBox="0 0 400 300" xmlns="http://www.w3.org/2000/svg">
+            <!-- 果园背景示意 -->
+            <rect width="400" height="300" fill="#3c4a2e"/>
+            <rect y="180" width="400" height="120" fill="#2e3a24"/>
+            <!-- 枝干 -->
+            <path d="M0 120 Q 120 90 240 130 T 400 110" stroke="#4a3a28" stroke-width="10" fill="none"/>
+            <path d="M150 108 Q 170 150 200 170" stroke="#4a3a28" stroke-width="6" fill="none"/>
+            <!-- 叶片 -->
+            <ellipse cx="60" cy="80" rx="34" ry="16" fill="#4e5f38" transform="rotate(-20 60 80)"/>
+            <ellipse cx="330" cy="70" rx="30" ry="14" fill="#4e5f38" transform="rotate(15 330 70)"/>
+            <ellipse cx="250" cy="200" rx="28" ry="13" fill="#465632" transform="rotate(-8 250 200)"/>
+            <!-- 四颗果实，颜色对应四个成熟度 -->
+            <circle cx="110" cy="150" r="26" fill="#7a8c33"/>
+            <circle cx="200" cy="185" r="24" fill="#9c7a14"/>
+            <circle cx="290" cy="140" r="27" fill="#c4631f"/>
+            <circle cx="175" cy="120" r="22" fill="#9e2c21"/>
+          </svg>
+
+          <!-- 标注框：left/top/width/height 全是百分比，和原图尺寸无关 -->
+          <span class="box" style="left:21%;top:41.3%;width:13%;height:17.3%;border-color:var(--color-ripeness-1)">
+            <i class="lb" style="background:var(--color-ripeness-1)">未熟 96%</i>
+          </span>
+          <span class="box" style="left:44%;top:53.7%;width:12%;height:16%;border-color:var(--color-ripeness-2)">
+            <i class="lb" style="background:var(--color-ripeness-2)">转色期 84%</i>
+          </span>
+          <span class="box" style="left:65.8%;top:37.7%;width:13.5%;height:18%;border-color:var(--color-ripeness-3)">
+            <i class="lb" style="background:var(--color-ripeness-3)">着色期 90%</i>
+          </span>
+          <span class="box" style="left:38.3%;top:32.7%;width:11%;height:14.7%;border-color:var(--color-ripeness-4)">
+            <i class="lb" style="background:var(--color-ripeness-4)">完熟 95%</i>
+          </span>
+        </div>
+
+        <!-- 结论 -->
+        <div>
+          <p class="verdict-main tnum">62%</p>
+          <p class="verdict-sub">达到着色期及以上的比例</p>
+          <p class="verdict-note">该门槛可按果园自己的采收标准调整</p>
+        </div>
+
+        <!-- 色带 -->
+        <div>
+          <h2 class="block-title">成熟度分布</h2>
+          <div class="band">
+            <i style="width:26%;background:var(--color-ripeness-1)"></i>
+            <i style="width:22%;background:var(--color-ripeness-2)"></i>
+            <i style="width:36%;background:var(--color-ripeness-3)"></i>
+            <i style="width:16%;background:var(--color-ripeness-4)"></i>
+          </div>
+          <ul class="legend">
+            <li><span class="sw" style="background:var(--color-ripeness-1)"></span><span class="nm">未熟</span><span class="ct">34</span></li>
+            <li><span class="sw" style="background:var(--color-ripeness-2)"></span><span class="nm">转色期</span><span class="ct">22</span></li>
+            <li><span class="sw" style="background:var(--color-ripeness-3)"></span><span class="nm">着色期</span><span class="ct">41</span></li>
+            <li><span class="sw" style="background:var(--color-ripeness-4)"></span><span class="nm">完熟</span><span class="ct">18</span></li>
+          </ul>
+        </div>
+
+        <!-- 逐果清单 -->
+        <div>
+          <h2 class="block-title">逐个果实（4 个）</h2>
+          <ul class="fruit-list">
+            <li>
+              <span class="idx tnum">1</span>
+              <span class="badge"><span class="dot" style="background:var(--color-ripeness-4)"></span>完熟<span class="cf tnum">95%</span></span>
+              <span class="dc tnum">框 98%</span>
+            </li>
+            <li>
+              <span class="idx tnum">2</span>
+              <span class="badge"><span class="dot" style="background:var(--color-ripeness-3)"></span>着色期<span class="cf tnum">90%</span></span>
+              <span class="dc tnum">框 97%</span>
+            </li>
+            <li>
+              <span class="idx tnum">3</span>
+              <span class="badge"><span class="dot" style="background:var(--color-ripeness-1)"></span>未熟<span class="cf tnum">96%</span></span>
+              <span class="dc tnum">框 95%</span>
+            </li>
+            <li>
+              <span class="idx tnum">4</span>
+              <span class="badge"><span class="dot" style="background:var(--color-ripeness-2)"></span>转色期<span class="cf tnum">84%</span></span>
+              <span class="dc tnum">框 93%</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- 元信息 -->
+        <div class="meta">
+          <div><span class="k">地块</span>东坡地</div>
+          <div><span class="k">耗时</span><span class="tnum">检测 42ms ＋ 分类 86ms</span></div>
+          <p class="dim">模型对“着色期”和“完熟期”的判断最容易混。这是已知的困难点，在成熟度接近的两级之间准确率会下降。</p>
+        </div>
+
+        <div class="submit-zone">
+          <button class="btn btn-primary btn-block">再拍一张</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       大屏
+       ============================================================ -->
+  <div style="flex:1 1 900px;">
+    <div class="frame-label">大屏 · 路演演示 <span>（/screen）— 深色面，靠语义令牌自动切换，组件代码零改动</span></div>
+    <div class="screen">
+      <div class="scr-top">
+        <span class="nm">柿子成熟度检测系统</span>
+        <span class="src">东坡地 · 最近一次巡检</span>
+      </div>
+
+      <div class="scr-body">
+        <div class="scr-hero">
+          <div class="photo-wrap" style="height:100%;">
+            <svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice" style="height:100%;width:100%;" xmlns="http://www.w3.org/2000/svg">
+              <rect width="400" height="300" fill="#3c4a2e"/>
+              <rect y="180" width="400" height="120" fill="#2e3a24"/>
+              <path d="M0 120 Q 120 90 240 130 T 400 110" stroke="#4a3a28" stroke-width="10" fill="none"/>
+              <path d="M150 108 Q 170 150 200 170" stroke="#4a3a28" stroke-width="6" fill="none"/>
+              <ellipse cx="60" cy="80" rx="34" ry="16" fill="#4e5f38" transform="rotate(-20 60 80)"/>
+              <ellipse cx="330" cy="70" rx="30" ry="14" fill="#4e5f38" transform="rotate(15 330 70)"/>
+              <ellipse cx="250" cy="200" rx="28" ry="13" fill="#465632" transform="rotate(-8 250 200)"/>
+              <circle cx="110" cy="150" r="26" fill="#93a83f"/>
+              <circle cx="200" cy="185" r="24" fill="#d6b23c"/>
+              <circle cx="290" cy="140" r="27" fill="#e07b33"/>
+              <circle cx="175" cy="120" r="22" fill="#cf4436"/>
+            </svg>
+            <span class="box" style="left:21%;top:41.3%;width:13%;height:17.3%;border-color:var(--hue-unripe-d)">
+              <i class="lb" style="background:var(--hue-unripe-d)">未熟 96%</i>
+            </span>
+            <span class="box" style="left:44%;top:53.7%;width:12%;height:16%;border-color:var(--hue-turning-d)">
+              <i class="lb" style="background:var(--hue-turning-d);color:#151a13">转色期 84%</i>
+            </span>
+            <span class="box" style="left:65.8%;top:37.7%;width:13.5%;height:18%;border-color:var(--hue-coloring-d)">
+              <i class="lb" style="background:var(--hue-coloring-d)">着色期 90%</i>
+            </span>
+            <span class="box" style="left:38.3%;top:32.7%;width:11%;height:14.7%;border-color:var(--hue-full-d)">
+              <i class="lb" style="background:var(--hue-full-d)">完熟 95%</i>
+            </span>
+          </div>
+        </div>
+
+        <aside class="scr-rail">
+          <div>
+            <p class="lbl">可采收率</p>
+            <p class="rate">62<small>%</small></p>
+            <p class="note">达到着色期及以上的比例</p>
+          </div>
+          <div class="div"></div>
+          <div>
+            <p class="lbl">成熟度分布</p>
+            <div class="band" style="margin-top:12px">
+              <i style="width:26%;background:var(--hue-unripe-d)"></i>
+              <i style="width:22%;background:var(--hue-turning-d)"></i>
+              <i style="width:36%;background:var(--hue-coloring-d)"></i>
+              <i style="width:16%;background:var(--hue-full-d)"></i>
+            </div>
+            <ul class="legend">
+              <li><span class="sw" style="background:var(--hue-unripe-d)"></span><span class="nm">未熟</span><span class="ct">34</span></li>
+              <li><span class="sw" style="background:var(--hue-turning-d)"></span><span class="nm">转色期</span><span class="ct">22</span></li>
+              <li><span class="sw" style="background:var(--hue-coloring-d)"></span><span class="nm">着色期</span><span class="ct">41</span></li>
+              <li><span class="sw" style="background:var(--hue-full-d)"></span><span class="nm">完熟</span><span class="ct">18</span></li>
+            </ul>
+            <p class="total">共检出 <span class="tnum">115</span> 个果实</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note-strip">
+  <strong>关于这张预览里的两个替身。</strong>
+  一、图片是 <strong>SVG 示意图</strong>，不是真实照片 —— 为了在离线预览里把"果实 + 标注框"的构图表达清楚。
+  真正跑起来时这里是果园实拍图，框的位置由后端返回的坐标算出来。
+  二、数字的字体不是设计里指定的 Barlow（离线加载不了外部字体），会退到系统字体。
+  <br><br>
+  <strong>这个页面能验证什么：</strong>配色关系、信息层级、"英雄区是图不是数字"这个判断、
+  色带的三重编码（色块 + 名称 + 数量）、以及深浅两个面用的是同一套语义令牌。
+</div>
+
+</body>
+</html>

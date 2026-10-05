@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+
+    <!--
+      viewport-fit=cover：让页面延伸到 iPhone 的刘海/圆角区域，
+      配合 CSS 的 env(safe-area-inset-*) 使用。
+      user-scalable 不禁止 —— 禁止缩放是无障碍问题（WCAG 1.4.4）。
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+
+    <!--
+      ⚠️ 标题在这里是占位。真正的标题由 src/main.js 从 config/brand.js 读入后设置。
+      原因：产品名后期要改，不能散落在多个文件里。
+      这里留一个可读性兜底值，防止 JS 加载失败时标题是空的。
+    -->
+    <title>柿子成熟度检测系统</title>
+
+    <!-- 地址栏配色，移动端浏览器会把状态栏染成这个色 -->
+    <meta name="theme-color" content="#f2f4ee" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>柿子成熟度识别 · 测试页</title>
+<style>
+  body { font-family: "Microsoft YaHei", system-ui, sans-serif; margin: 0; padding: 24px;
+         background: #f5f6f8; color: #222; }
+  h1 { font-size: 20px; margin: 0 0 16px; }
+  .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  button { padding: 8px 18px; font-size: 14px; border: 0; border-radius: 6px;
+           background: #2b7de9; color: #fff; cursor: pointer; }
+  button:disabled { background: #a9c6ee; cursor: not-allowed; }
+  #status { color: #666; font-size: 14px; }
+  .stage { position: relative; display: inline-block; max-width: 100%; }
+  .stage img { max-width: 100%; display: block; border-radius: 6px; }
+  .stage canvas { position: absolute; left: 0; top: 0; pointer-events: none; }
+  .tag { display: inline-block; padding: 3px 10px; margin: 4px 6px 0 0; border-radius: 12px;
+         color: #fff; font-size: 13px; }
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 14px; border-radius: 8px;
+        overflow: auto; max-height: 300px; font-size: 12px; line-height: 1.5; }
+  .hint { color: #888; font-size: 13px; margin-top: 8px; }
+  a { color: #2b7de9; }
+</style>
+</head>
+<body>
+
+<h1>柿子成熟度识别 · P0 测试页</h1>
+
+<div class="card">
+  <div class="row">
+    <input type="file" id="file" accept="image/*">
+    <button id="btn">开始识别</button>
+    <span id="status">选一张图，然后点识别</span>
+  </div>
+  <div class="hint">
+    这是 <b>临时测试页</b>，用来验证后端接口通了。正式前端在 P2 阶段用 Vue 做。
+    接口文档：<a href="/docs" target="_blank">/docs</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="stage">
+    <img id="img" alt="预览">
+    <canvas id="cv"></canvas>
+  </div>
+</div>
+
+<div class="card" id="stats" style="display:none"></div>
+
+<div class="card" id="jsonCard" style="display:none">
+  <b>返回的 JSON（就是前后端的接口契约）</b>
+  <pre id="json"></pre>
+</div>
+
+<script>
+const fileInput = document.getElementById('file');
+const btn       = document.getElementById('btn');
+const img       = document.getElementById('img');
+const cv        = document.getElementById('cv');
+const statusEl  = document.getElementById('status');
+const statsEl   = document.getElementById('stats');
+const jsonEl    = document.getElementById('json');
+const jsonCard  = document.getElementById('jsonCard');
+
+// 成熟度 -> 颜色（和后端 config.py 的注释一致：青绿 / 黄橙 / 橙红 / 深红）
+const COLORS = {
+  '1_unripe':   '#7ec850',
+  '2_turning':  '#e8b33a',
+  '3_coloring': '#e87a2a',
+  '4_full':     '#d33b3b',
+};
+const NAMES = {
+  '1_unripe':   '未熟（青绿）',
+  '2_turning':  '转色期（黄橙）',
+  '3_coloring': '着色期（橙红）',
+  '4_full':     '完熟（深红）',
+};
+
+let lastDets = [];       // 存最近一次结果，窗口尺寸变化时重绘
+
+fileInput.addEventListener('change', () => {
+  const f = fileInput.files[0];
+  if (!f) return;
+  lastDets = [];
+  img.src = URL.createObjectURL(f);
+  statusEl.textContent = '已选图，点「开始识别」';
+  statsEl.style.display = 'none';
+  jsonCard.style.display = 'none';
+});
+
+img.addEventListener('load', () => {
+  cv.width  = img.clientWidth;
+  cv.height = img.clientHeight;
+  drawBoxes(lastDets);
+});
+
+// ★ 关键点：图片在页面里被 CSS 缩放了，但框坐标是【原图像素】
+//   所以画的时候必须按 displayed / natural 的比例换算。
+//   窗口大小一变，比例就变了 —— 必须重绘，否则框会错位。
+window.addEventListener('resize', () => drawBoxes(lastDets));
+
+btn.addEventListener('click', async () => {
+  const f = fileInput.files[0];
+  if (!f) { statusEl.textContent = '先选一张图'; return; }
+
+  btn.disabled = true;
+  statusEl.textContent = '识别中…';
+  const fd = new FormData();
+  fd.append('file', f);
+
+  const t0 = performance.now();
+  try {
+    const resp = await fetch('/api/predict', { method: 'POST', body: fd });
+    const data = await resp.json();
+    const cost = performance.now() - t0;
+
+    if (!resp.ok || !data.ok) {
+      statusEl.textContent = '失败：' + (data.error || data.detail || ('HTTP ' + resp.status));
+      return;
+    }
+
+    statusEl.textContent =
+      `完成：检出 ${data.detections.length} 个　` +
+      `检测 ${data.timing.detect_ms.toFixed(0)}ms + 分类 ${data.timing.classify_ms.toFixed(0)}ms　` +
+      `（往返 ${cost.toFixed(0)}ms）`;
+
+    showStats(data);
+    drawBoxes(data.detections);
+    jsonEl.textContent = JSON.stringify(data, null, 2);
+    jsonCard.style.display = 'block';
+  } catch (e) {
+    statusEl.textContent = '请求失败：' + e;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function drawBoxes(dets) {
+  lastDets = dets || [];
+  cv.width  = img.clientWidth;
+  cv.height = img.clientHeight;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (!img.naturalWidth) return;
+
+  const sx = img.clientWidth  / img.naturalWidth;
+  const sy = img.clientHeight / img.naturalHeight;
+
+  for (const d of lastDets) {
+    const [x1, y1, x2, y2] = d.box;
+    const X = x1 * sx, Y = y1 * sy, W = (x2 - x1) * sx, H = (y2 - y1) * sy;
+    const color = COLORS[d.ripeness] || '#00ff00';
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.strokeRect(X, Y, W, H);
+
+    const text = `${d.ripeness_label} ${(d.ripeness_conf * 100).toFixed(0)}%`;
+    ctx.font = '13px "Microsoft YaHei", sans-serif';
+    const tw = ctx.measureText(text).width;
+    const ty = Math.max(0, Y - 20);
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    ctx.fillRect(X, ty, tw + 10, 20);
+    ctx.fillStyle = color;
+    ctx.fillText(text, X + 5, ty + 14);
+  }
+}
+
+function showStats(data) {
+  let html = `<b>共检出 ${data.detections.length} 个柿子</b>
+              <span style="color:#888;font-size:13px">
+                　原图 ${data.image.width}×${data.image.height}
+              </span><br>`;
+  for (const k of ['1_unripe', '2_turning', '3_coloring', '4_full']) {
+    const v = data.counts[k] ?? 0;
+    if (v > 0) html += `<span class="tag" style="background:${COLORS[k]}">${NAMES[k]} ${v}</span>`;
+  }
+  const rejected = data.detections.filter(d => d.ripeness_label === '未知').length;
+  if (rejected) html += `<span class="tag" style="background:#888">未知 ${rejected}</span>`;
+  statsEl.innerHTML = html;
+  statsEl.style.display = 'block';
+}
+</script>
+
+</body>
+</html>

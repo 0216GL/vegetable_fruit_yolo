@@ -1,0 +1,15 @@
+# ==============================================================================
+#  P0 推理服务依赖 —— 装进现有的 yolo 环境即可，不用新建环境
+#
+#  安装：
+#      conda activate yolo
+#      cd /d D:\vegetable_fruit_yolo
+#      pip install -r requirements-server.txt
+#
+#  这些包都很小（uvicorn 的 standard 版会带 websockets，P6 做实时摄像头要用）
+# ==============================================================================
+
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart>=0.0.12     # FastAPI 接收 multipart 文件上传必须要它，容易漏
+pydantic>=2.7

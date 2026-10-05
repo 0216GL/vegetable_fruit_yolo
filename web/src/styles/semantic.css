@@ -1,0 +1,61 @@
+/* ============================================================================
+   第二级：语义令牌（semantic tokens）
+   ────────────────────────────────────────────────────────────────────────────
+   描述【用途】，不描述【外观】。
+
+   ★ 组件只准用这一层。组件里出现十六进制色值 = 违规。
+     好处：换肤只改 primitives.css；加新表面只加一个覆盖块（见文件末尾）。
+
+   ★ 同一个语义名字，在不同表面上可以是不同的值 —— 这就是
+     "一套令牌，两种尺度"。H5 是浅色面、大屏是深色面，
+     但它们用同一套语义名，所以组件代码是同一份。
+   ============================================================================ */
+
+:root {
+  /* ---- 表面 ---- */
+  --color-surface:        var(--paper);
+  --color-surface-raised: var(--white);
+  --color-border:         var(--rule);
+
+  /* ---- 文字 ----
+     注意：次要文字是从底色的色相派生的（带绿倾向），
+     不是中性灰。impeccable 的 craft-floor 明确要求
+     "在有颜色的底上，次要文字要从该色相或前景派生，绝不用灰"。 */
+  --color-text-primary:   var(--ink);
+  --color-text-secondary: var(--ink-2);
+  --color-text-inverse:   var(--white);
+
+  /* ---- 成熟度（浅色面默认）---- */
+  --color-ripeness-1: var(--hue-unripe-on-light);
+  --color-ripeness-2: var(--hue-turning-on-light);
+  --color-ripeness-3: var(--hue-coloring-on-light);
+  --color-ripeness-4: var(--hue-full-on-light);
+
+  /* ---- 字号 / 行高 ---- */
+  --text-body:    var(--fs-body);
+  --text-caption: var(--fs-caption);
+
+  /* ---- 触摸目标 ---- */
+  --control-min-height: var(--tap-min);
+}
+
+/* ============================================================================
+   深色面：大屏（投影用）
+   ────────────────────────────────────────────────────────────────────────────
+   只需覆盖值，语义名不变 —— 所以所有组件代码零改动。
+   这就是两级令牌架构的兑现之处。
+   ============================================================================ */
+
+.surface-screen {
+  --color-surface:        var(--bark);
+  --color-surface-raised: var(--bark-2);
+  --color-border:         var(--bark-rule);
+
+  --color-text-primary:   var(--ink-on-dark);
+  --color-text-secondary: var(--ink-2-on-dark);
+
+  --color-ripeness-1: var(--hue-unripe-on-dark);
+  --color-ripeness-2: var(--hue-turning-on-dark);
+  --color-ripeness-3: var(--hue-coloring-on-dark);
+  --color-ripeness-4: var(--hue-full-on-dark);
+}

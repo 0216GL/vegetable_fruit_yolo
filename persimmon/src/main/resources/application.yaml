@@ -1,0 +1,84 @@
+# ============================================================================
+#  persimmon 后端配置
+# ============================================================================
+#  ⚠️ 有两处你必须自己改：数据库密码、以及确认数据库名
+# ============================================================================
+
+server:
+  # 和前端 vite.config.js 里代理的目标端口一致，改了要两边一起改
+  port: 8080
+
+spring:
+  application:
+    name: persimmon
+
+  # --------------------------------------------------------------------------
+  # 数据库连接
+  # --------------------------------------------------------------------------
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/persimmon?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+
+    # ⚠️⚠️ 改成你自己的 MySQL 密码
+    password: 改这里
+
+    # 连接池（HikariCP，Spring Boot 自带的，不用额外配）
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 30000
+
+  # --------------------------------------------------------------------------
+  # 上传文件大小限制
+  # --------------------------------------------------------------------------
+  # 和 Python 服务的 MAX_UPLOAD_MB=20、前端提示保持一致
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 20MB
+      # 文件先写临时目录再处理，别全憋在内存里
+      file-size-threshold: 2MB
+
+# ============================================================================
+#  MyBatis 配置
+# ============================================================================
+mybatis:
+  configuration:
+    # ★★★ 这一行是必加的，不加会踩一个很难查的坑 ★★★
+    #
+    # 数据库列名是下划线风格（count_unripe），Java 字段是驼峰（countUnripe）。
+    # MyBatis 默认【不会】自动转换 —— 结果是字段全是 null，而且【不报错】。
+    #
+    # 这是新手最难查的一类 bug：接口能通、SQL 也没写错，就是查出来是空。
+    map-underscore-to-camel-case: true
+
+  # 以后要用 XML 写复杂 SQL（比如那个 GROUP BY 汇总），放在这个目录下
+  mapper-locations: classpath:mapper/*.xml
+
+# ============================================================================
+#  AI 服务（Python）
+# ============================================================================
+#  集中在这里，Python 服务换机器/换端口只改这一处
+ai:
+  service:
+    base-url: http://127.0.0.1:8001
+    predict-path: /api/predict
+    health-path: /api/health
+
+    # 连接超时：连不上就赶紧失败
+    connect-timeout-ms: 3000
+
+    # 读取超时：给足。模型冷启动要十几秒，给短了会出现
+    # "推理其实成功了，Java 却报超时"的诡异现象
+    read-timeout-ms: 60000
+
+# ============================================================================
+#  日志
+# ============================================================================
+logging:
+  level:
+    root: info
+    # 只看我们自己的包，把 SQL 也打出来（开发期很有用）
+    org.ymg.persimmon: debug
+  pattern:
+    console: "%d{HH:mm:ss} %-5level %logger{36} - %msg%n"

@@ -1,0 +1,47 @@
+/* ============================================================================
+   覆盖 Element Plus 的外观
+   ============================================================================
+   我们用它，但不接受它的默认长相 —— 那个长相是国内学生项目最眼熟的模板。
+
+   做法：只覆盖它暴露出来的 CSS 变量，不去改它的组件样式。
+   好处是升级 Element Plus 版本时不会被我们的 hack 卡住。
+
+   规矩：这里出现的值必须是【语义令牌】，不能写死色值。
+   ============================================================================ */
+
+:root {
+  /* ---- 主色 ----
+     用"着色期"那个橙做主色。理由：它是四个成熟度里最"中间"的一档，
+     也最接近这个产品的视觉主角，比默认的蓝更贴题。 */
+  --el-color-primary: var(--color-ripeness-3);
+
+  /* ---- 字体 ---- */
+  --el-font-family: var(--font-cn);
+
+  /* ---- 圆角：和我们的形状语言对齐 ---- */
+  --el-border-radius-base: var(--radius-sm);
+  --el-border-radius-small: var(--radius-sm);
+  --el-border-radius-round: var(--radius-pill);
+
+  /* ---- 文字色：从我们的令牌来，不要它那套中性灰 ---- */
+  --el-text-color-primary: var(--color-text-primary);
+  --el-text-color-regular: var(--color-text-secondary);
+  --el-text-color-placeholder: var(--color-text-secondary);
+
+  /* ---- 边框 / 背景 ---- */
+  --el-border-color: var(--color-border);
+  --el-border-color-light: var(--color-border);
+  --el-border-color-lighter: var(--color-border);
+  --el-bg-color: var(--color-surface-raised);
+  --el-bg-color-overlay: var(--color-surface-raised);
+
+  /* ---- 触摸目标 ----
+     Element Plus 默认的按钮高度偏矮。果园现场可能戴手套，
+     整体抬到最小触摸尺寸。 */
+  --el-component-size: var(--control-min-height);
+  --el-component-size-large: 52px;
+}
+
+/* ---- 深色面（大屏）上的 Element 组件 ----
+   继承 .surface-screen 的语义令牌覆盖即可，这里不用再写一遍。
+   这正是两级令牌的价值：组件层零感知。 */

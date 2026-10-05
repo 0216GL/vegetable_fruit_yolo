@@ -36,7 +36,7 @@
 |---|---|---|---|
 | **`persimmon/`** | Java 业务后端（Spring Boot 4 + MyBatis + MySQL） | **IntelliJ IDEA** | [persimmon/README.md](persimmon/README.md) |
 | **`web/`** | 前端（Vue 3 + Vite） | **VS Code** | [web/README.md](web/README.md) |
-| 根目录 `*.py` | AI 推理与训练（Ultralytics YOLO） | **PyCharm** | 本文末尾 |
+| **`ai/`** | AI 推理与训练（Ultralytics YOLO） | **PyCharm** | 本文末尾 |
 | `docs/` | 设计与过程文档 | 任意 | 见下方索引 |
 | `dataset/` `weights/` `models/` `runs/` | 数据集、预训练权重、训练产物 | — | — |
 
@@ -99,14 +99,17 @@ npm run dev
 
 ## 柿果成熟度识别 · 蔬菜水果分类
 
-用 Ultralytics **YOLO11n-cls** 做迁移学习，两个相互独立的分类任务：
+用 Ultralytics **YOLO11** 做迁移学习。**两层结构**：先检测出每颗柿子在哪儿，再判它的成熟度。
 
-| 模型 | 任务 | 类别 | 验证集 top-1 |
+| 模型 | 任务 | 类别 | 指标 |
 |---|---|---|---|
-| `persimmon` | **柿果成熟度识别**（主项目） | 4 | **84.44%** |
-| `species` | 蔬菜水果物种识别（对照/复用） | 12 | **97.95%** |
+| `persimmon_det_v1` | 检测：找出柿子在哪儿 | 1 | mAP@0.5 = **88.23%** |
+| `persimmon_cls_v1` | 分类：判断成熟度（主任务） | 4 | top-1 = **88.89%** / top-5 = 100% |
+| `fruits_cls_v1` | 物种识别（对照实验） | 12 | top-1 = 97.95% |
 
-支持命令行单图/批量预测、摄像头实时识别。全部代码可离线运行，GPU/CPU 皆可。
+> ⚠️ **上面是 2026-10-05 重测的数字，以此为准。**
+> 旧版 README 里写的 84.44% 是**修正数据增强参数之前**那次的结果。
+> **完整的技术数据（含逐类指标、检测漏检问题、缺口清单）见 [`docs/TECH_DATA.md`](docs/TECH_DATA.md)。**
 
 ---
 
@@ -117,54 +120,75 @@ conda activate yolo
 cd /d D:\vegetable_fruit_yolo
 ```
 
-> **⚠️ 第一次使用先建数据集**（`dataset_persimmon/` 体积 191 MB，未随仓库上传）：
-> ```bat
-> python build_dataset_persimmon.py --source "你的分类图片目录"
-> ```
-> 源目录要求「一个类别一个子文件夹」。如果只是想跑物种模型，可跳过这一步。
+> ⚠️ **数据集说明**：`dataset/dataset_persimmon/`（191 MB）**没有随仓库上传**，
+> 而且**原始源图片已丢失，无法重建**。想重新训练需要一个同结构的数据集。
+
+> 💡 **下面所有命令都用 `-m ai.xxx` 的形式，而且必须在项目根目录下执行。**
+> 因为代码已经收进 `ai/` 包了，脚本内部写的是 `from ai import config`，
+> 这种写法要求**项目根目录**在 Python 的搜索路径里。
+> （直接 `python ai\detect.py` 会报 `ModuleNotFoundError: No module named 'ai'`）
+
+### 训练
 
 ```bat
-python predict.py "D:\照片\柿子.jpg"          :: 单张预测
-python predict.py "dataset_persimmon\val"     :: 整个验证集（自动算逐类准确率）
-python camera.py                              :: 摄像头实时识别
-python camera.py --test                       :: 摄像头自检（不弹窗口，排障用）
-python train.py                               :: 重新训练（改 config 后）
+python -m ai.train                :: 训练成熟度分类模型
+python -m ai.train_detect         :: 训练检测模型
 ```
 
-切换模型只需改 `config.py` 一行：
+训练参数在 `ai/train.py` 顶部的 `CONFIG` 字典里。
+
+### 推理
+
+```bat
+python -m ai.detect "D:\照片\柿子.jpg"    :: 单张图，两层推理
+python -m ai.detect "某个文件夹"           :: 整个文件夹
+python -m ai.detect                       :: 不带参数 = 开摄像头
+```
+
+结果图存到 `runs/detect_predict/`。
+
+### 往检测数据集加数据
+
+```bat
+python -m ai.add_to_dataset check                    :: 先检查配对情况
+python -m ai.add_to_dataset images "C:\新图文件夹"     :: 加图片（自动缩小超大图）
+python -m ai.add_to_dataset labels "C:\标注文件夹"     :: 加标注
+```
+
+### 起服务
+
+```bat
+run_server.bat                 :: FastAPI 服务（8001）
+```
+
+等价于 `uvicorn ai.server.app:app --host 0.0.0.0 --port 8001`，也必须从项目根目录跑。
+
+切换模型改 `ai/config.py` 一行：
 
 ```python
 ACTIVE_MODEL = "persimmon"     # 或 "species"
 ```
 
+> **⚠️ 旧版 README 里提到的 `predict.py`、`camera.py`、`build_dataset_persimmon.py` 已经不在项目里了**
+> （重构成 `detect.py` 时合并掉了）。看到那三个名字请忽略。
+
 ---
 
 ## 结果
 
-### 模型一：柿果成熟度（`fruits_cls_v2`）
+**详细的逐类指标、混淆矩阵解读、以及检测层的实测数据，全部在
+[`docs/TECH_DATA.md`](docs/TECH_DATA.md)。** 这里只放结论：
 
-| 类别 | 含义 | 验证准确率 |
-|---|---|---|
-| `1_unripe` | 未熟（青绿） | 26/27 = **96.30%** |
-| `2_turning` | 转色期（黄橙） | 16/19 = 84.21% |
-| `3_coloring` | 着色期（橙红） | 16/25 = **64.00%** |
-| `4_full` | 完熟（深红） | 18/19 = **94.74%** |
-| **总体** | | **76/90 = 84.44%** |
-
-- 训练 50 轮耗时 147 秒，模型体积 3.05 MB
-- **峰值 84.44% 出现在第 12 轮**，之后回落到 77.78% —— 典型过拟合，`best.pt` 保存的是第 12 轮
-- 主要误差：`着色期 → 完熟`（25 张里错 7 张）
-
-### 模型二：蔬菜水果物种（`fruits_cls_v1`）
-
-| 指标 | 数值 |
+| 项目 | 结果 |
 |---|---|
-| 验证集 top-1 | **97.95%**（383/391） |
-| 验证集 top-5 | 100.00% |
-| 训练耗时 | 13.4 分钟（CPU，50 轮） |
-| 模型体积 | 3.07 MB |
+| 成熟度分类 top-1 | **88.89%**（80/90） |
+| 成熟度分类 top-5 | **100%** |
+| 最弱的类别 | **转色期**（召回 74%）—— 它处在成熟连续体正中间，被两边挤 |
+| 曾经的弱项 | 着色期（旧模型 64% → 新模型 **88%**），**已通过修正增强参数解决** |
+| 物种识别（对照） | 97.95%；同一份数据用 sklearn+SVM 只有 63.68% —— 差距来自迁移学习 |
 
-作为对照，同一份数据用 **sklearn + 手工特征（HSV 直方图 + HOG）+ SVM** 只能到 **63.68%**，差距来自迁移学习。
+> **★ 检测层有个严重问题必须先看：** 整树照片上只找到 **2%** 的果实。
+> 详见 `docs/TECH_DATA.md` 的「检测层」一节。**这是产品能否成立的关键。**
 
 ---
 
@@ -186,7 +210,7 @@ predict.py   camera.py   互不依赖
 
 ```python
 # 对外接口（engine.py 只有这四个）
-import engine
+from ai import engine
 
 engine.is_ready(key=None)                     -> bool
 model, names, info = engine.load_model(key=None)
@@ -211,39 +235,89 @@ results = engine.predict_paths([p1, p2, ...])
 
 ---
 
-## 目录结构
+## 完整目录结构
 
 ```
 vegetable_fruit_yolo/
-├── config.py                       ★ 全部配置：模型注册表/推理参数/摄像头参数/中文类名
-├── engine.py                       ★ 推理核心，对外接口
-├── predict.py                        图片与文件夹测试（单图 / 批量 / 逐类准确率）
-├── camera.py                         摄像头实时识别（--test 为自检模式）
-├── train.py                          训练脚本
-├── build_dataset_persimmon.py        数据集构建脚本（把分类图片整理成 train/val）
 │
-├── dataset/                          物种数据集（12 类）【随仓库上传】
-│   ├── train/<12类>/                 841 张
-│   └── val/<12类>/                   391 张
+├── ai/                          ★ 代码①：AI 推理与训练（Python）
+│   ├── __init__.py                包标记（必须有，`from ai import ...` 靠它）
+│   ├── config.py                  ★ 全部配置：模型注册表 / 阈值 / 中文类名
+│   ├── engine.py                  分类模型加载 + 推理
+│   ├── inference.py               ★ 两层推理核心（检测 → 裁剪 → 分类）
+│   ├── detect.py                  命令行：单图 / 文件夹 / 摄像头
+│   ├── train.py                   训练成熟度分类模型
+│   ├── train_detect.py            训练检测模型
+│   ├── add_to_dataset.py          往检测数据集加图/标注
+│   └── server/                    FastAPI 服务（8001）
+│       ├── app.py                   接口定义
+│       └── schemas.py               ★ 接口契约（对应 Java 的 AiPredictResponse）
 │
-├── dataset_persimmon/                柿果成熟度数据集（4 类）【需用脚本重建】
-│   ├── train/{1_unripe,2_turning,3_coloring,4_full}/   107/76/98/75 = 356 张
-│   ├── val/...                                         27/19/25/19 = 90 张
-│   ├── classes.txt                   类别列表
-│   └── split_manifest.csv            446 行划分清单（每张图去了哪）
+├── persimmon/                   ★ 代码②：Java 业务后端
+│   ├── pom.xml
+│   ├── src/main/java/org/ymg/persimmon/
+│   │   ├── PersimmonApplication.java
+│   │   ├── common/                 统一响应体、错误码、全局异常
+│   │   ├── config/                 跨域、HTTP 客户端
+│   │   ├── ai/                     调 Python 服务
+│   │   └── entity/ mapper/ service/ controller/   ⬜ 待写
+│   ├── src/main/resources/
+│   │   ├── application.yaml        数据库 + MyBatis 配置
+│   │   └── db/schema.sql           ★ 建表 SQL（已执行）
+│   └── README.md
 │
-├── weights/yolo11n-cls.pt            预训练权重（ImageNet 1000 类，5.52 MB）
-├── models/
-│   ├── fruits_cls_v1/best.pt         物种模型（97.95%）
-│   └── fruits_cls_v2/best.pt         柿果成熟度模型（84.44%）
-├── runs/                             训练日志、曲线、混淆矩阵、args.yaml
-├── .gitignore
-└── README.md
+├── web/                         ★ 代码③：前端（Vue 3 + Vite）
+│   ├── package.json / vite.config.js / index.html
+│   ├── preview/design-preview.html  静态预览页（不装 Node 也能看）
+│   ├── src/
+│   │   ├── config/brand.js         产品名 + 可采收率门槛
+│   │   ├── utils/ripeness.js       ★ 四个成熟度的唯一真源
+│   │   ├── api/                    axios 实例 + 接口
+│   │   ├── stores/                 最近一次结果
+│   │   ├── styles/                 ★ 两级设计令牌
+│   │   ├── components/             标注图 / 色带 / 标签
+│   │   ├── layouts/                H5 / 大屏
+│   │   └── views/                  五个页面
+│   └── README.md
+│
+├── docs/                        ★ 文档
+│   ├── ARCHITECTURE.md             系统架构与路线图
+│   ├── API.md                      ★ 接口契约（前后端对接看这份）
+│   ├── TECH_DATA.md                ★ 技术数据（写材料用）
+│   ├── FRONTEND_DESIGN.md          前端设计
+│   ├── DESIGN_WORKSHEET.md         数据库设计方法与练习
+│   ├── FIELD_TRIP.md               实地采集清单
+│   ├── PROJECT_MAP.md              项目全景清单
+│   ├── 前端技术方案.md              ⚠️ 早期方案，与实现冲突
+│   └── UI设计规范.md                ⚠️ 早期方案，与实现冲突
+│
+├── dataset/                     数据
+│   ├── dataset_fruit&&vegetable/   物种数据集（12 类 1232 张）✅ 已上传
+│   ├── dataset_persimmon/          柿果成熟度（4 类 443 张）❌ 未上传，源图已丢失
+│   └── dataset_persimmon_det/      检测数据集（单类 98 张）✅ 已上传
+│
+├── weights/                     预训练权重（yolo11n.pt / yolo11n-cls.pt）
+├── models/                      训练产物
+│   ├── persimmon_cls_v1/best.pt    ★ 成熟度分类（88.89%）
+│   ├── persimmon_det_v1/best.pt    ★ 检测（mAP@0.5 = 88.23%）
+│   └── fruits_cls_v1/best.pt       物种（97.95%）
+├── runs/                        训练日志、曲线、混淆矩阵、检测结果图
+├── 测试结果/                     09-26 的实测报告与对照图（★ 建议看）
+│
+├── run_server.bat               启动脚本：AI 服务（8001）
+├── camera.bat                   启动脚本：摄像头实时识别
+├── README.md                    本文件
+├── PRODUCT.md                   产品事实（用户是谁、证据、不许虚构什么）
+└── .gitignore
 ```
 
-> **为什么不把 `dataset_persimmon/` 传上来**：191 MB（平均 888 KB/张，是手机截图与实拍原图，
-> 而 `dataset/` 是 21 KB/张的网图）。提交后 clone 会很慢。
-> 用 `build_dataset_persimmon.py` 可以从你自己的图片重建出**结构完全一致**的数据集。
+**三个代码目录 + 数据 + 文档，各自独立、互不干扰。**
+
+> **⚠️ 关于 `dataset_persimmon/`（191 MB）**
+> 它**没有随仓库上传**，而且 `.gitignore` 里写明：**原始源图片已丢失，无法重建**。
+> 现有这 443 张是**唯一副本，勿删**。
+> 2026-10-04 太行山新采的 100 多张实拍照片是唯一的补充来源，放在
+> `dataset/field_trip/`（该目录被 gitignore，不进仓库）。
 
 ---
 
@@ -360,24 +434,40 @@ Ultralytics 的 `hsv_*` 默认值是给**目标检测**用的，直接套到"**�
 
 ## 已知问题
 
-### 1. `着色期 ↔ 完熟` 混淆（当前最大问题）
+### 1. ★ 检测层严重漏检（当前最大问题）
 
-`着色期` 召回率只有 64%，25 张里 7 张被判成 `完熟`。原因：
+2026-09-26 实测：**整棵树照片上只找到 2% 的果实**（3 / 约 200）。
 
-- 两类颜色相邻（色相 35.6° vs 29.5°，a\* +9.8 vs +28.6）
-- 训练增强破坏了颜色信号（见上一节）
-- 部分图片标注可能不一致
+| 场景 | 检出 / 目测可见 | 召回率 |
+|---|---|---|
+| 手拿大柿子（近景） | 3 / 约 10 | 约 30% |
+| 近景一丛 | 6 / 约 14 | 约 43% |
+| **整棵树（远景）** | **3 / 约 200** | **约 2%** |
 
-**处理顺序（按性价比）：**
+**根因**：检测训练集只有 82 张，而且 **100% 是未熟青果的近景大图**，负样本 0 张。
+模型只学过"近景、大颗、青绿色"这一种形态。
 
-1. **核对"高置信度判错"的图** —— 模型非常确定地给了不同答案，很可能是标注错误。零成本。
-   涉及的文件见 `runs/fruits_cls_v2/` 目录下的记录，或用 `predict.py` 跑一遍验证集看"判错的 N 张"
-2. **修正增强参数后重训** —— 不用补图，1 分钟出结果
-3. 补 `着色期` 的边界样本（橙偏红、红偏橙）
+**这一条直接决定产品能不能成立** —— 声称"判断一整片林子"，检测层目前撑不住。
 
-### 2. 域偏移
+- 完整分析、已实测排除的方案、改进方向：[`docs/TECH_DATA.md`](docs/TECH_DATA.md)
+- 原始测试报告：[`测试结果/分析报告.md`](测试结果/分析报告.md)
 
-物种模型的训练数据是**网上下载的白底商品图**，真实摄像头背景完全不同。实测一张手机实拍照片：
+### 2. ~~`着色期 ↔ 完熟` 混淆~~（已解决 ✅）
+
+旧模型（84.44%）时着色期召回只有 64%，25 张里错 7 张。
+
+**修正数据增强参数后已修复**：着色期召回 **64% → 88%**，整体 **84.44% → 88.89%**。
+
+原因回顾：两类平均色相只差 6°（35.6° vs 29.5°），
+而 Ultralytics 默认的 `hsv_s = 0.7`（饱和度随机抖 ±70%）把这个信号破坏了。
+改成 0.2 并关掉 `auto_augment` 之后解决。
+
+**代价**：最弱的类别转移到了 `转色期`（召回 74%）——
+它处在成熟连续体正中间，往青一点是未熟、往红一点是着色，两边都被挤。
+
+### 3. 域偏移
+
+物种模型的训练数据是**网上下载的白底商品图**，真实果园背景完全不同。实测一张手机实拍照片：
 
 | | 边框背景色 | 平均亮度 | 到最近类中心距离 |
 |---|---|---|---|
@@ -386,48 +476,67 @@ Ultralytics 的 `hsv_*` 默认值是给**目标检测**用的，直接套到"**�
 
 **模型学到的不只是物体，还有"浅色背景 + 中间有个东西"这个组合。**
 
-缓解办法：演示时把物体放在白纸/白盘子上（零成本）；或补拍几十张实拍图混入训练集重训（根治）。
+缓解办法：演示时把物体放在白纸/白盘子上（零成本）；或补拍实拍图混入训练集重训（根治）。
+**2026-10-04 太行山采的 100 多张实拍照片正好可以用于此。**
 
-### 3. 没有检测框
+### 4. 成熟度分级是否该改成三级 —— 未决
 
-分类模型回答的是"整张图是什么"，**不是"东西在哪"**。所以摄像头画面里没有框，只有左上角几行字。
+「着色期」和「完熟」在颜色上相邻，一直是难点。
+曾考虑合并成三类，但老师提出"**不同农副产品需要不同成熟度**"
+（柿饼要硬的着色果、醋可以用完熟软果）——
+**这条边界恰恰是商业上最值钱的**，所以不能合并。
 
-要画框需要另加检测模型，且需要**人工标注边界框**（每颗果一个框）—— 分类模型只需要文件夹分类，检测模型需要位置标注。
+⚠️ 但这个用途-成熟度的对应关系**目前没有一手依据，需要向企业核实**。
 
 ---
 
-## 脚本说明
+## 脚本说明（当前实际存在的）
 
 | 脚本 | 作用 | 会不会训练 |
 |---|---|---|
-| `config.py` | 配置中心，无副作用 | ❌ |
-| `engine.py` | 模型加载 + 推理，对外接口 | ❌ |
-| `predict.py` | 单图 / 批量 / 逐类准确率 | ❌ 只加载 |
-| `camera.py` | 摄像头实时识别 + `--test` 自检 | ❌ 只加载 |
-| `build_dataset_persimmon.py` | 把分类图片整理成 train/val 数据集 | ❌ |
-| `train.py` | 环境检查 → 数据体检 → 训练 → 归档产物 | ✅ 训练 |
+| `config.py` | 配置中心：模型注册表、阈值、摄像头参数 | ❌ |
+| `engine.py` | 分类模型加载 + 推理 | ❌ |
+| `inference.py` | **两层推理核心**（检测 + 分类），`detect.py` 和 `server/` 都调它 | ❌ |
+| `detect.py` | 命令行：单图 / 文件夹 / 摄像头 | ❌ 只加载 |
+| `train.py` | 训练成熟度分类模型 | ✅ |
+| `train_detect.py` | 训练检测模型 | ✅ |
+| `add_to_dataset.py` | 把新图片加进数据集 | ❌ |
+| `server/app.py` | FastAPI 服务（8001） | ❌ |
 
-**训练一次，永久使用** —— `models/*/best.pt` 就是模型的全部状态，除非换数据或调参，否则不需要重新训练。
+**训练一次，永久使用** —— `models/*/best.pt` 就是模型的全部状态。
+
+**两个 .bat：** `run_server.bat`（起服务）、`camera.bat`（开摄像头）。
 
 ---
 
-## 开发任务清单
+## 开发任务清单（2026-10-05 更新）
+
+**AI 侧：**
 
 - [x] 数据布局规范化（train/val 分类目录）
 - [x] 迁移学习训练，产出 `best.pt`
 - [x] 验证集评估 + 中文混淆矩阵
-- [x] 单图 / 批量预测
-- [x] 摄像头实时识别
-- [x] CUDA 版 PyTorch（GPU 可用）
-- [x] **架构解耦**：拆出 `config.py` / `engine.py`，`predict` 与 `camera` 零依赖
+- [x] **架构解耦**：拆出 `config.py` / `engine.py` / `inference.py`
 - [x] **多模型支持**：模型注册表 + 一行切换
-- [x] **柿果成熟度模型**（4 类，84.44%）
-- [ ] 修正数据增强参数后重训（预期 88~92%）
-- [ ] 核对高置信度判错的图，修正标注
-- [ ] 补 `着色期`、`留树软果`、`过熟果` 样本
-- [ ] 画框（需检测模型 + 边界框标注）
-- [ ] 摄像头多线程优化
-- [ ] 推理服务化（FastAPI）
+- [x] **柿果成熟度分类模型**（4 类，**88.89%**）
+- [x] **检测模型**（单类别，mAP@0.5 = 88.23%）
+- [x] **修正数据增强参数并重训** —— 着色期召回 64% → 88%（原本预期 88~92%，达成）
+- [x] 推理服务化（FastAPI，8001）
+- [ ] ★ **补检测训练数据：远景小目标图 + 负样本**（当前最大的问题，见「已知问题 1」）
+- [ ] 太行山采集的实拍照片整理进数据集
+- [ ] 补 `转色期` 样本（现在是分类最弱的一类）
+- [ ] 与他人对比实验（YOLO n/s/m/l 不同规模）
+
+**应用侧：**
+
+- [x] Java 后端骨架（`persimmon/`）
+- [x] 数据库设计与建表（`region` / `capture` / `notification`）
+- [x] 前端五页面（`web/`）
+- [ ] Java 业务层：Entity / Mapper / Service / Controller
+- [ ] 历史页与大屏接真实数据
+- [ ] 比赛材料（商业计划书、PPT、技术报告）
+
+**明确不做：** 登录与鉴权、病虫害识别、多地块管理、边缘设备部署（构想，未验证）
 
 ---
 
@@ -449,10 +558,17 @@ Ultralytics 的 `hsv_*` 默认值是给**目标检测**用的，直接套到"**�
 
 ## 数据说明
 
+> ⚠️ **详细的、已核实的数据集信息见 [`docs/TECH_DATA.md`](docs/TECH_DATA.md) 第 4、5 节。**
+> 下面只是速查表。
+
 | 数据集 | 类别 | 训练 | 验证 | 合计 | 体积 | 在仓库里？ |
 |---|---|---|---|---|---|---|
-| `dataset/` | 12（物种） | 841 | 391 | 1232 | 28 MB | ✅ 是 |
-| `dataset_persimmon/` | 4（成熟度） | 356 | 90 | 446 | 191 MB | ❌ 用脚本重建 |
+| `dataset_fruit&&vegetable` | 12（物种） | 841 | 391 | 1232 | 28 MB | ✅ 是 |
+| `dataset_persimmon` | 4（成熟度） | **353** | 90 | **443** | 191 MB | ❌ **未上传，源图已丢失** |
+| `dataset_persimmon_det` | 1（检测） | 82 | 16 | 98 | — | ✅ 是 |
+
+> **训练集从 356 变成了 353**（2026-10-05 实测 `val()` 时发现的）。
+> 逐类数字需要重新数一遍，暂以总数 353 为准。
 
 ### dataset/（物种）
 
@@ -471,27 +587,36 @@ Ultralytics 的 `hsv_*` 默认值是给**目标检测**用的，直接套到"**�
 
 ### dataset_persimmon/（柿果成熟度）
 
-| 类别 | 中文 | 训练 | 验证 |
+> ⚠️ **准确数字以 [`docs/TECH_DATA.md`](docs/TECH_DATA.md) 第 5 节为准。**
+> 2026-10-05 实测时发现训练集是 **353 张**（不是 356），
+> **逐类数字需要重新数一遍**，下表是旧值，仅供参考：
+
+| 类别 | 中文 | 训练（旧值） | 验证 |
 |---|---|---|---|
 | `1_unripe` | 未熟（青绿） | 107 | 27 |
 | `2_turning` | 转色期（黄橙） | 76 | 19 |
 | `3_coloring` | 着色期（橙红） | 98 | 25 |
 | `4_full` | 完熟（深红） | 75 | 19 |
-| **合计** | | **356** | **90** |
+| **合计** | | ~~356~~ **353** | **90** |
 
-**重建方式：**
+**⚠️ `dataset_persimmon/` 的原始源图片已丢失，无法重建。**
+现有这份是**唯一副本，勿删**。
 
-```bat
-:: 把你的图片按类别放好：源目录/<类别名>/*.jpg
-python build_dataset_persimmon.py --source "C:\Users\dell\Desktop\images"
+**划分规则**：逐类 8:2 分层，固定随机种子 `seed=42`，因此**同一份源数据每次得到完全相同的划分**，可复现。
 
-:: 只想先看划分结果（不写文件）
-python build_dataset_persimmon.py --source "..." --dry-run
+> ⚠️ 图片平均 888 KB（手机截图 + 实拍原图），比 `dataset/` 的 21 KB 大得多。
+> 训练时会被统一缩放到 224×224，**源图分辨率不影响精度**。
 
-:: 改比例或种子
-python build_dataset_persimmon.py --source "..." --val-ratio 0.15 --seed 123
+### 想加新数据怎么办
+
+**用 `add_to_dataset.py`**，或者最直接的办法：**把图片按类别丢进对应的文件夹**
+
+```
+dataset/dataset_persimmon/train/<类别名>/新图片.jpeg
+dataset/dataset_persimmon/val/<类别名>/新图片.jpeg
 ```
 
-**划分规则**：逐类 8:2 分层，固定随机种子 `seed=42`，因此**同一份源数据每次得到完全相同的划分**，可复现。清单见 `dataset_persimmon/split_manifest.csv`。
+**分类数据集不需要标注工具**——文件夹名就是标签。这是分类和检测最大的区别。
 
-> ⚠️ 图片平均 888 KB（手机截图 + 实拍原图），比 `dataset/` 的 21 KB 大得多。训练时会被统一缩放到 224×224，源图分辨率不影响精度。
+> **❌ 旧版 README 里的 `build_dataset_persimmon.py` 已经不在项目里了**（重构成现在的结构时删掉了）。
+> 而且它也没用了——**源图片已丢失，重建不出来**。
