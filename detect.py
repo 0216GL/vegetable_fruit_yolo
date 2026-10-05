@@ -24,10 +24,10 @@ from PIL import Image, ImageDraw, ImageFont
 
 import config
 import engine
+import inference
 
 ROOT = config.ROOT
 OUT_DIR = ROOT / "runs" / "detect_predict"
-DET_IMGSZ = 640      # 检测的输入尺寸，必须和训练时一致
 
 
 # ==============================================================================
@@ -69,81 +69,9 @@ def put_chinese(frame, items, font):
 
 
 # ==============================================================================
-# 第 1 层：检测模型
+# 推理逻辑已经搬到 inference.py —— 命令行 / Web 服务 / 摄像头共用那一份。
+# 这个文件只保留「命令行界面」相关的东西：加载提示、画框、三种运行模式。
 # ==============================================================================
-_DET = {}
-
-
-def load_detector(verbose=True):
-    """加载柿子检测模型（同一个进程只加载一次）。"""
-    weights = config.DETECT["weights"]
-    if not weights.exists():
-        raise FileNotFoundError(
-            f"找不到检测模型：{weights}\n"
-            f"       请先训练：python train_detect.py"
-        )
-    if "m" not in _DET:
-        from ultralytics import YOLO
-        t0 = time.time()
-        _DET["m"] = YOLO(str(weights))
-        if verbose:
-            print(f"检测模型已加载  {weights.name}  ({(time.time() - t0) * 1000:.0f} 毫秒)")
-    return _DET["m"]
-
-
-# ==============================================================================
-# 第 2 层：裁剪 + 分类
-# ==============================================================================
-def crop_box(frame, xyxy, margin):
-    """按框裁出一块图，四周多留一点边（给分类模型更多上下文）。"""
-    h, w = frame.shape[:2]
-    x1, y1, x2, y2 = (float(v) for v in xyxy)
-    bw, bh = x2 - x1, y2 - y1
-    x1 = int(max(0, x1 - bw * margin))
-    y1 = int(max(0, y1 - bh * margin))
-    x2 = int(min(w, x2 + bw * margin))
-    y2 = int(min(h, y2 + bh * margin))
-    if x2 - x1 < 4 or y2 - y1 < 4:
-        return None
-    return frame[y1:y2, x1:x2]
-
-
-def detect_and_classify(frame, det_model, key=None):
-    """
-    两层推理。返回 (结果列表, 检测耗时ms, 分类耗时ms)
-    每项: {"box": (x1,y1,x2,y2), "det_conf": float, "name": str, "label": str, "conf": float}
-    """
-    t0 = time.time()
-    r = det_model.predict(source=frame, imgsz=DET_IMGSZ,
-                          conf=config.DETECT["conf"],
-                          iou=config.DETECT["iou"],        # NMS 阈值，压重复框
-                          verbose=False)[0]
-    det_ms = (time.time() - t0) * 1000
-
-    results = []
-    cls_ms = 0.0
-
-    if r.boxes is None or len(r.boxes) == 0:
-        return results, det_ms, cls_ms
-
-    for box in r.boxes:
-        xyxy = box.xyxy[0].cpu().numpy()
-        crop = crop_box(frame, xyxy, config.DETECT["margin"])
-        if crop is None:
-            continue
-        # ---- 第 2 层：裁出来的图喂给成熟度分类模型 ----
-        cr = engine.predict(crop, key=key, verbose=False)
-        cls_ms += cr["ms"]
-        if cr["error"]:
-            continue
-        results.append({
-            "box": tuple(int(v) for v in xyxy),
-            "det_conf": float(box.conf[0]),
-            "name": cr["name"],
-            "label": config.label_of(cr["name"]) if cr["ok"] else "未知",
-            "conf": cr["conf"],
-        })
-    return results, det_ms, cls_ms
 
 
 # ==============================================================================
@@ -158,9 +86,9 @@ def draw_results(frame, results, font):
     for d in results:
         x1, y1, x2, y2 = d["box"]
         # 摄像头模式下用平滑后的结果（没有平滑时退回原始结果）
-        name = d.get("smooth_label", d["name"])
-        conf = d.get("smooth_conf", d["conf"])
-        label = config.label_of(name) if d["label"] != "未知" else "未知"
+        cls_name = d.get("smooth_class", d["ripeness"])
+        conf = d.get("smooth_conf", d["ripeness_conf"])
+        label = config.label_of(cls_name) if cls_name != "未知" else "未知"
         color = C_UNKNOWN if label == "未知" else C_OK
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         text = f"{label} {conf * 100:.0f}%"
@@ -177,20 +105,22 @@ def summarize(results):
     print(f"  检测到 {len(results)} 个柿子:")
     for i, d in enumerate(results, 1):
         x1, y1, x2, y2 = d["box"]
-        print(f"    {i}. {d['label']:<14} 成熟度置信度 {d['conf'] * 100:5.1f}%   "
+        print(f"    {i}. {d['ripeness_label']:<14} 成熟度置信度 {d['ripeness_conf'] * 100:5.1f}%   "
               f"检测框 ({x1},{y1})-({x2},{y2})  检测置信度 {d['det_conf'] * 100:.1f}%")
 
 
 # ==============================================================================
 # 三种模式
 # ==============================================================================
-def run_image(path, det_model, font, key=None):
-    frame = cv2.imread(str(path))
+def run_image(path, font, key=None):
+    frame = inference.read_image(path)
     if frame is None:
         print(f"[错误] 读不出这张图：{path}")
         return
 
-    results, det_ms, cls_ms = detect_and_classify(frame, det_model, key)
+    out = inference.predict(frame, key=key)
+    results = out["detections"]
+    det_ms, cls_ms = out["timing"]["detect_ms"], out["timing"]["classify_ms"]
     frame = draw_results(frame, results, font)
 
     print()
@@ -201,12 +131,15 @@ def run_image(path, det_model, font, key=None):
     print(f"\n  耗时  检测 {det_ms:.0f} ms + 分类 {cls_ms:.0f} ms")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out = OUT_DIR / f"{Path(path).stem}_det.jpg"
-    cv2.imwrite(str(out), frame)
-    print(f"  结果图 {out}")
+    out_path = OUT_DIR / f"{Path(path).stem}_det.jpg"
+    import numpy as _np
+    ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
+    if ok:
+        buf.tofile(str(out_path))
+    print(f"  结果图 {out_path}")
 
 
-def run_folder(folder, det_model, font, key=None):
+def run_folder(folder, font, key=None):
     files = sorted(f for f in folder.iterdir()
                    if f.is_file() and f.suffix.lower() in config.IMAGE_EXT)
     if not files:
@@ -221,16 +154,19 @@ def run_folder(folder, det_model, font, key=None):
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     total_boxes = 0
     for f in files:
-        frame = cv2.imread(str(f))
+        frame = inference.read_image(f)
         if frame is None:
             print(f"  [跳过] 读不出 {f.name}")
             continue
-        results, det_ms, cls_ms = detect_and_classify(frame, det_model, key)
+        out = inference.predict(frame, key=key)
+        results = out["detections"]
         total_boxes += len(results)
-        frame = draw_results(frame, results, font)
-        cv2.imwrite(str(OUT_DIR / f"{f.stem}_det.jpg"), frame)
+        vis = draw_results(frame, results, font)
+        ok, buf = cv2.imencode(".jpg", vis, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        if ok:
+            buf.tofile(str(OUT_DIR / f"{f.stem}_det.jpg"))
 
-        labels = ", ".join(f"{d['label']}({d['conf'] * 100:.0f}%)" for d in results) or "无"
+        labels = ", ".join(f"{d['ripeness_label']}({d['ripeness_conf'] * 100:.0f}%)" for d in results) or "无"
         print(f"  {f.name:<34} {len(results)} 个   {labels}")
 
     print()
@@ -266,7 +202,7 @@ class LabelSmoother:
         self.tracks = []        # [{"box":..., "labels": deque, "confs": deque}]
 
     def smooth(self, results):
-        """就地给每个结果补上 smooth_label / smooth_conf 两个字段。"""
+        """就地给每个结果补上 smooth_class / smooth_conf 两个字段。"""
         matched = [False] * len(results)
         alive = []
 
@@ -282,9 +218,9 @@ class LabelSmoother:
                 d = results[bi]
                 matched[bi] = True
                 t["box"] = d["box"]
-                t["labels"].append(d["name"])
-                t["confs"].append(d["conf"])
-                d["smooth_label"] = Counter(t["labels"]).most_common(1)[0][0]
+                t["labels"].append(d["ripeness"])
+                t["confs"].append(d["ripeness_conf"])
+                d["smooth_class"] = Counter(t["labels"]).most_common(1)[0][0]
                 d["smooth_conf"] = sum(t["confs"]) / len(t["confs"])
                 alive.append(t)
 
@@ -293,10 +229,10 @@ class LabelSmoother:
             if matched[i]:
                 continue
             alive.append({"box": d["box"],
-                          "labels": deque([d["name"]], maxlen=self.n),
-                          "confs": deque([d["conf"]], maxlen=self.n)})
-            d["smooth_label"] = d["name"]
-            d["smooth_conf"] = d["conf"]
+                          "labels": deque([d["ripeness"]], maxlen=self.n),
+                          "confs": deque([d["ripeness_conf"]], maxlen=self.n)})
+            d["smooth_class"] = d["ripeness"]
+            d["smooth_conf"] = d["ripeness_conf"]
 
         self.tracks = alive
         return results
@@ -305,7 +241,7 @@ class LabelSmoother:
 # ==============================================================================
 # 摄像头
 # ==============================================================================
-def run_camera(index, det_model, font, key=None):
+def run_camera(index, font, key=None):
     cap = cv2.VideoCapture(index)
     if not cap.isOpened():
         print(f"[错误] 打不开摄像头 {index} 号（可能被别的程序占用，或换个编号试试）")
@@ -324,11 +260,13 @@ def run_camera(index, det_model, font, key=None):
         if config.CAMERA["mirror"]:
             frame = cv2.flip(frame, 1)
 
-        results, det_ms, cls_ms = detect_and_classify(frame, det_model, key)
-        results = smoother.smooth(results)      # 时序平滑，防标签乱跳
+        out = inference.predict(frame, key=key)
+        results = smoother.smooth(out["detections"])      # 时序平滑，防标签乱跳
         frame = draw_results(frame, results, font)
 
         frames += 1
+        det_ms = out["timing"]["detect_ms"]
+        cls_ms = out["timing"]["classify_ms"]
         fps = frames / max(1e-6, time.time() - t_start)
         status = f"柿子 {len(results)} 个    检测 {det_ms:.0f}ms + 分类 {cls_ms:.0f}ms    FPS {fps:.1f}"
         frame = put_chinese(frame, [(status, (14, frame.shape[0] - 32), (170, 170, 170), True)], font)
@@ -341,7 +279,9 @@ def run_camera(index, det_model, font, key=None):
         if k == ord("s"):
             OUT_DIR.mkdir(parents=True, exist_ok=True)
             p = OUT_DIR / time.strftime("snap_%Y%m%d_%H%M%S.jpg")
-            cv2.imwrite(str(p), frame)
+            ok2, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
+            if ok2:
+                buf.tofile(str(p))
             print(f"已存图  {p}")
 
     cap.release()
@@ -365,31 +305,25 @@ def main():
     print("=" * 70)
 
     try:
-        det_model = load_detector(verbose=True)
+        inference.load(verbose=True)
     except Exception as e:
         print(f"\n[错误] {e}")
-        return 1
-
-    try:
-        engine.load_model(key, verbose=True)
-    except Exception as e:
-        print(f"\n[错误] 第二层分类模型加载失败：{e}")
         return 1
 
     font = find_font(22)
 
     # 纯数字 = 摄像头编号
     if target.isdigit():
-        run_camera(int(target), det_model, font, key)
+        run_camera(int(target), font, key)
     else:
         p = Path(target)
         if not p.exists():
             print(f"\n[错误] 路径不存在：{p}")
             return 1
         if p.is_dir():
-            run_folder(p, det_model, font, key)
+            run_folder(p, font, key)
         else:
-            run_image(p, det_model, font, key)
+            run_image(p, font, key)
     return 0
 
 

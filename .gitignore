@@ -36,6 +36,12 @@ dataset/dataset_persimmon/*
 !dataset/dataset_persimmon/classes.txt
 images/
 
+# ---------- 实地采集的原始照片：不进仓库 ----------
+# 2026-10-04 太行山采集的手机原图，单张 3-5 MB、100 多张，
+# 加上后续采集会很快上 GB。放本地训练用，不提交。
+dataset/field_trip*/
+dataset/field_trip/
+
 # ---------- 训练输出里的噪音 ----------
 runs/**/train_batch*.jpg
 runs/**/val_batch*.jpg

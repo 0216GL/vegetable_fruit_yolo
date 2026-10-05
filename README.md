@@ -1,4 +1,103 @@
-# 柿果成熟度识别 · 蔬菜水果分类
+# 智慧农业综合巡检平台 · 柿子成熟度检测
+
+> 拍一张果园照片，判断**每一颗果实**的成熟度，汇总成"这片林子现在能不能采"。
+> 用于互联网+ / 挑战杯参赛，同时作为求职作品。
+
+---
+
+## 这是什么
+
+一个完整的系统，三块：
+
+```
+  手机 / 摄像头
+        │  拍照上传
+        ▼
+┌──────────────────┐     ┌────────────────────┐
+│  前端  web/       │ ──▶ │ Java 后端 persimmon/ │
+│  Vue 3 + Vite     │     │ Spring Boot + MySQL │
+└──────────────────┘     └─────────┬──────────┘
+                                   │ HTTP
+                                   ▼
+                         ┌────────────────────┐
+                         │ AI 服务（根目录 .py）│
+                         │ YOLO 检测 + 成熟度分类│
+                         └────────────────────┘
+```
+
+**AI 服务先识别，Java 落库存业务数据，前端展示。** 三层分开是有意为之——
+换模型不用动业务代码，换前端不用动模型。
+
+---
+
+## 目录速查
+
+| 目录 | 是什么 | 用什么打开 | 详细说明 |
+|---|---|---|---|
+| **`persimmon/`** | Java 业务后端（Spring Boot 4 + MyBatis + MySQL） | **IntelliJ IDEA** | [persimmon/README.md](persimmon/README.md) |
+| **`web/`** | 前端（Vue 3 + Vite） | **VS Code** | [web/README.md](web/README.md) |
+| 根目录 `*.py` | AI 推理与训练（Ultralytics YOLO） | **PyCharm** | 本文末尾 |
+| `docs/` | 设计与过程文档 | 任意 | 见下方索引 |
+| `dataset/` `weights/` `models/` `runs/` | 数据集、预训练权重、训练产物 | — | — |
+
+> ⚠️ **三个部分要用不同的 IDE 打开。** 拿 PyCharm 开 `persimmon/` 它是看不懂 Maven 工程的。
+
+---
+
+## 怎么跑起来
+
+**需要三个进程，缺一不可。**
+
+```bat
+:: ① AI 服务（8001）—— 先起这个，另外两个都依赖它
+cd /d D:\vegetable_fruit_yolo
+run_server.bat
+```
+
+```bat
+:: ② Java 后端（8080）
+cd /d D:\vegetable_fruit_yolo\persimmon
+mvnw spring-boot:run
+```
+
+```bat
+:: ③ 前端（5173）
+cd /d D:\vegetable_fruit_yolo\web
+npm install     :: 第一次才要
+npm run dev
+```
+
+| 地址 | 是什么 |
+|---|---|
+| http://localhost:5173/h5 | 手机端：上传 → 结果 → 历史 |
+| http://localhost:5173/screen | 大屏：路演演示用 |
+| http://localhost:5173/dev/tokens | 设计令牌自检（开发用，上线删） |
+| http://localhost:8080/api/health | Java + AI 两边是否都活着 |
+| http://localhost:8001/docs | AI 服务的接口文档 |
+
+---
+
+## 文档索引
+
+| 文档 | 讲什么 | 什么时候看 |
+|---|---|---|
+| [`PRODUCT.md`](PRODUCT.md) | **产品事实**：用户是谁、解决什么、有什么证据、**不许虚构什么** | 写任何材料前 |
+| [`docs/API.md`](docs/API.md) | **接口契约**：前后端对接就靠这份 | 写后端接口时 |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 系统架构、关键设计取舍、分阶段路线图 | 答辩前 |
+| [`docs/FRONTEND_DESIGN.md`](docs/FRONTEND_DESIGN.md) | 前端设计、五页面清单、设计令牌 | 改前端时 |
+| [`docs/DESIGN_WORKSHEET.md`](docs/DESIGN_WORKSHEET.md) | 数据库设计的方法（七步）与练习 | 回顾设计思路 |
+| [`docs/FIELD_TRIP.md`](docs/FIELD_TRIP.md) | 太行山实地采集清单与访谈问题 | 再采集时 |
+| [`persimmon/README.md`](persimmon/README.md) | Java 后端：哪些已搭好、哪些要写、三个必踩的坑 | 写 Java 时 |
+| [`web/README.md`](web/README.md) | 前端：怎么跑、三条不能破的规矩 | 改前端时 |
+
+---
+
+# 附录：AI 部分详细说明
+
+> 以下是原 README，讲的是根目录 Python 脚本那部分（模型、训练、实验数据、踩过的坑）。
+> 内容仍然有效，保留在这里。
+
+## 柿果成熟度识别 · 蔬菜水果分类
 
 用 Ultralytics **YOLO11n-cls** 做迁移学习，两个相互独立的分类任务：
 
