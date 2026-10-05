@@ -124,7 +124,7 @@ AI 返回：  counts = { "1_unripe": 34, "2_turning": 22, ... }   ← 英文 key
 
 ```bat
 cd /d D:\vegetable_fruit_yolo
-run_server.bat                    :: 先起这个（8001）
+D:\Anaconda\envs\yolo\python.exe -m uvicorn ai.server.app:app --host 0.0.0.0 --port 8001
 ```
 
 ```bat

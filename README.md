@@ -51,8 +51,13 @@
 ```bat
 :: ① AI 服务（8001）—— 先起这个，另外两个都依赖它
 cd /d D:\vegetable_fruit_yolo
-run_server.bat
+D:\Anaconda\envs\yolo\python.exe -m uvicorn ai.server.app:app --host 0.0.0.0 --port 8001
 ```
+
+> ⚠️ **这条命令有两个硬性要求，写错任意一个都起不来。**
+> **① 端口只能是 8001**：8000 和 7000 已被系统占用，8080（Java 后端）和 5173（前端）也要避开，8001 是唯一可用的。
+> **② 必须用 conda 环境的绝对路径 `D:\Anaconda\envs\yolo\python.exe`**：PATH 里的 `python` 是微软商店的占位符，
+> 直接敲 `python` 会**静默失败**（不报错也不启动），必须走绝对路径。
 
 ```bat
 :: ② Java 后端（8080）
@@ -86,7 +91,6 @@ npm run dev
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 系统架构、关键设计取舍、分阶段路线图 | 答辩前 |
 | [`docs/FRONTEND_DESIGN.md`](docs/FRONTEND_DESIGN.md) | 前端设计、五页面清单、设计令牌 | 改前端时 |
 | [`docs/DESIGN_WORKSHEET.md`](docs/DESIGN_WORKSHEET.md) | 数据库设计的方法（七步）与练习 | 回顾设计思路 |
-| [`docs/FIELD_TRIP.md`](docs/FIELD_TRIP.md) | 太行山实地采集清单与访谈问题 | 再采集时 |
 | [`persimmon/README.md`](persimmon/README.md) | Java 后端：哪些已搭好、哪些要写、三个必踩的坑 | 写 Java 时 |
 | [`web/README.md`](web/README.md) | 前端：怎么跑、三条不能破的规矩 | 改前端时 |
 
@@ -103,11 +107,12 @@ npm run dev
 
 | 模型 | 任务 | 类别 | 指标 |
 |---|---|---|---|
-| `persimmon_det_v1` | 检测：找出柿子在哪儿 | 1 | mAP@0.5 = **88.23%** |
+| `persimmon_det_v1` | 检测：找出柿子在哪儿 | 1 | mAP@0.5 = **90.87%** |
 | `persimmon_cls_v1` | 分类：判断成熟度（主任务） | 4 | top-1 = **88.89%** / top-5 = 100% |
 | `fruits_cls_v1` | 物种识别（对照实验） | 12 | top-1 = 97.95% |
 
 > ⚠️ **上面是 2026-10-05 重测的数字，以此为准。**
+> 检测的 **90.87%** 是 **2026-09-27 补小目标（远景）训练数据后重训**的结果，补数据前是 88.23%。
 > 旧版 README 里写的 84.44% 是**修正数据增强参数之前**那次的结果。
 > **完整的技术数据（含逐类指标、检测漏检问题、缺口清单）见 [`docs/TECH_DATA.md`](docs/TECH_DATA.md)。**
 
@@ -158,10 +163,11 @@ python -m ai.add_to_dataset labels "C:\标注文件夹"     :: 加标注
 ### 起服务
 
 ```bat
-run_server.bat                 :: FastAPI 服务（8001）
+D:\Anaconda\envs\yolo\python.exe -m uvicorn ai.server.app:app --host 0.0.0.0 --port 8001
 ```
 
-等价于 `uvicorn ai.server.app:app --host 0.0.0.0 --port 8001`，也必须从项目根目录跑。
+**必须从项目根目录跑，端口必须 8001**（8000 和 7000 被系统占用，8080 与 5173 要留给 Java 后端和前端）。
+也必须用 `D:\Anaconda\envs\yolo\python.exe` 这个绝对路径 —— PATH 里的 `python` 是微软商店占位符，会**静默失败**。
 
 切换模型改 `ai/config.py` 一行：
 
@@ -181,31 +187,36 @@ ACTIVE_MODEL = "persimmon"     # 或 "species"
 
 | 项目 | 结果 |
 |---|---|
+| 检测 mAP@0.5 | **90.87%**（2026-09-27 补小目标数据重训后；补数据前 88.23%） |
+| 检测实拍召回 | 整棵树 **约 30%**（61 / 约 200）；近景 43% —— **仍是最大短板** |
 | 成熟度分类 top-1 | **88.89%**（80/90） |
 | 成熟度分类 top-5 | **100%** |
 | 最弱的类别 | **转色期**（召回 74%）—— 它处在成熟连续体正中间，被两边挤 |
 | 曾经的弱项 | 着色期（旧模型 64% → 新模型 **88%**），**已通过修正增强参数解决** |
 | 物种识别（对照） | 97.95%；同一份数据用 sklearn+SVM 只有 63.68% —— 差距来自迁移学习 |
 
-> **★ 检测层有个严重问题必须先看：** 整树照片上只找到 **2%** 的果实。
-> 详见 `docs/TECH_DATA.md` 的「检测层」一节。**这是产品能否成立的关键。**
+> **★ 检测层仍是最大短板，必须先看：** 2026-09-26 第一轮整树照片只找到 **2%** 的果实；
+> 补小目标（远景）数据后（2026-09-27 第二轮）整棵树提到 **61 / 约 200 ≈ 30%**，**漏检仍有约 70%**。
+> 详见 [`artifacts/报告_2026-09-27_第二轮.md`](artifacts/报告_2026-09-27_第二轮.md)。**这是产品能否成立的关键。**
 
 ---
 
 ## 架构
 
-拆成四层，**上下层单向依赖，`predict` 与 `camera` 之间零依赖**：
+拆成四层，**上下层单向依赖，同层之间零依赖**：
 
 ```
     config.py          所有路径与参数（不依赖任何东西）
         ↑
-    engine.py          推理核心：load_model / predict / predict_paths / is_ready
+    engine.py          第 2 层用：分类模型的加载与推理（load_model / predict / is_ready）
         ↑
-  ┌─────┴─────┐
-predict.py   camera.py   互不依赖
-（图片/批量） （摄像头）
+    inference.py       ★ 两层推理核心：检测 → 逐果裁剪 → 分类，返回统一结构
         ↑
-   （以后）网页后端 / 小程序 / 检测模块 —— 直接 import engine 即可
+  ┌─────┴──────┐
+detect.py     server/app.py       互不依赖
+（命令行/摄像头）（HTTP 接口 8001）
+        ↑
+   （以后）网页后端 / 小程序 / 检测模块 —— 直接 import inference 即可
 ```
 
 ```python
@@ -251,7 +262,9 @@ vegetable_fruit_yolo/
 │   ├── add_to_dataset.py          往检测数据集加图/标注
 │   └── server/                    FastAPI 服务（8001）
 │       ├── app.py                   接口定义
-│       └── schemas.py               ★ 接口契约（对应 Java 的 AiPredictResponse）
+│       ├── schemas.py               ★ 接口契约（对应 Java 的 AiPredictResponse）
+│       ├── requirements.txt         服务依赖（fastapi / uvicorn / python-multipart）
+│       └── static/index.html        临时测试页（http://127.0.0.1:8001/ ）
 │
 ├── persimmon/                   ★ 代码②：Java 业务后端
 │   ├── pom.xml
@@ -285,27 +298,21 @@ vegetable_fruit_yolo/
 │   ├── API.md                      ★ 接口契约（前后端对接看这份）
 │   ├── TECH_DATA.md                ★ 技术数据（写材料用）
 │   ├── FRONTEND_DESIGN.md          前端设计
-│   ├── DESIGN_WORKSHEET.md         数据库设计方法与练习
-│   ├── FIELD_TRIP.md               实地采集清单
-│   ├── PROJECT_MAP.md              项目全景清单
-│   ├── 前端技术方案.md              ⚠️ 早期方案，与实现冲突
-│   └── UI设计规范.md                ⚠️ 早期方案，与实现冲突
+│   └── DESIGN_WORKSHEET.md         数据库设计方法与练习
 │
 ├── dataset/                     数据
-│   ├── dataset_fruit&&vegetable/   物种数据集（12 类 1232 张）✅ 已上传
+│   ├── dataset_fruit_vegetable/    物种数据集（12 类 1232 张）✅ 已上传
 │   ├── dataset_persimmon/          柿果成熟度（4 类 443 张）❌ 未上传，源图已丢失
-│   └── dataset_persimmon_det/      检测数据集（单类 98 张）✅ 已上传
+│   └── dataset_persimmon_det/      检测数据集（单类 108 张）✅ 已上传
 │
 ├── weights/                     预训练权重（yolo11n.pt / yolo11n-cls.pt）
 ├── models/                      训练产物
 │   ├── persimmon_cls_v1/best.pt    ★ 成熟度分类（88.89%）
-│   ├── persimmon_det_v1/best.pt    ★ 检测（mAP@0.5 = 88.23%）
+│   ├── persimmon_det_v1/best.pt    ★ 检测（mAP@0.5 = 90.87%）
 │   └── fruits_cls_v1/best.pt       物种（97.95%）
 ├── runs/                        训练日志、曲线、混淆矩阵、检测结果图
-├── 测试结果/                     09-26 的实测报告与对照图（★ 建议看）
+├── artifacts/                   两轮实测报告与对照图（★ 建议看）
 │
-├── run_server.bat               启动脚本：AI 服务（8001）
-├── camera.bat                   启动脚本：摄像头实时识别
 ├── README.md                    本文件
 ├── PRODUCT.md                   产品事实（用户是谁、证据、不许虚构什么）
 └── .gitignore
@@ -316,8 +323,9 @@ vegetable_fruit_yolo/
 > **⚠️ 关于 `dataset_persimmon/`（191 MB）**
 > 它**没有随仓库上传**，而且 `.gitignore` 里写明：**原始源图片已丢失，无法重建**。
 > 现有这 443 张是**唯一副本，勿删**。
-> 2026-10-04 太行山新采的 100 多张实拍照片是唯一的补充来源，放在
-> `dataset/field_trip/`（该目录被 gitignore，不进仓库）。
+> 2026-10-04 太行山新采的 100 多张实拍照片是唯一的补充来源。
+> ⚠️ **它们目前还在桌面 `C:\Users\dell\Desktop\test3\`（105 张 .jpg），没有进项目。**
+> 要整理进来的话放到 `dataset/field_trip/`，该目录已被 gitignore（不进仓库）。
 
 ---
 
@@ -380,7 +388,7 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 | 0.60 | 385 | 379 | 6 | 98.44% |
 | **0.95** | 350 | 350 | **0** | **100.00%** |
 
-**柿果成熟度模型 —— 拒识基本无效：**
+**柿果成熟度模型 —— 拒识基本无效**（⚠️ 下表是在**旧模型（84.44%）**上测的；修正数据增强参数后**没有重测**，但 `config.py` 里的阈值仍按此结论设定）：
 
 | | 张数 | 置信度均值 |
 |---|---|---|
@@ -391,7 +399,7 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 
 | 阈值 | 总体准确率 |
 |---|---|
-| **0.00 ~ 0.40** | **84.44%** |
+| **0.00 ~ 0.40** | **84.44%**（旧模型；新模型整体 88.89%） |
 | 0.60 | 76.69% |
 | 0.80 | 63.33% |
 
@@ -436,21 +444,28 @@ Ultralytics 的 `hsv_*` 默认值是给**目标检测**用的，直接套到"**�
 
 ### 1. ★ 检测层严重漏检（当前最大问题）
 
-2026-09-26 实测：**整棵树照片上只找到 2% 的果实**（3 / 约 200）。
+**2026-09-26 第一轮实测**：整棵树照片上只找到 **2%** 的果实（3 / 约 200）。
 
-| 场景 | 检出 / 目测可见 | 召回率 |
+**2026-09-27 第二轮**：补了 **10 张远景小目标图（+443 个框）**后重训，
+mAP@0.5 **88.23% → 90.87%**，整棵树从 **3 个框 → 61 个框（约 30%）**。
+
+| 场景 | 补数据前（09-26） | 补数据后（09-27） |
 |---|---|---|
-| 手拿大柿子（近景） | 3 / 约 10 | 约 30% |
-| 近景一丛 | 6 / 约 14 | 约 43% |
-| **整棵树（远景）** | **3 / 约 200** | **约 2%** |
+| 手拿大柿子（近景） | 3 / 约 10 | 3 / 约 10（±0） |
+| 近景一丛 | 6 / 约 14（约 43%） | 6 / 约 14（约 43%，**没改善**） |
+| **整棵树（远景）** | **3 / 约 200（约 2%）** | **61 / 约 200（约 30%）** |
 
-**根因**：检测训练集只有 82 张，而且 **100% 是未熟青果的近景大图**，负样本 0 张。
-模型只学过"近景、大颗、青绿色"这一种形态。
+9 张测试图合计检出 **137 个框**。
+
+**根因**：补数据**之前**检测训练集只有 82 张，而且 **100% 是未熟青果的近景大图**，负样本 0 张 ——
+模型只学过"近景、大颗、青绿色"这一种形态。补进 10 张远景图后有明显改善，但**负样本仍是 0 张**。
 
 **这一条直接决定产品能不能成立** —— 声称"判断一整片林子"，检测层目前撑不住。
+补数据后它**仍然是最主要的未解决问题**：负样本仍为 **0**，整棵树的漏检仍有**约 70%**。
 
+- 第二轮报告：[`artifacts/报告_2026-09-27_第二轮.md`](artifacts/报告_2026-09-27_第二轮.md)
+- 第一轮报告：[`artifacts/分析报告_2026-09-26_第一轮.md`](artifacts/分析报告_2026-09-26_第一轮.md)
 - 完整分析、已实测排除的方案、改进方向：[`docs/TECH_DATA.md`](docs/TECH_DATA.md)
-- 原始测试报告：[`测试结果/分析报告.md`](测试结果/分析报告.md)
 
 ### 2. ~~`着色期 ↔ 完熟` 混淆~~（已解决 ✅）
 
@@ -505,7 +520,18 @@ Ultralytics 的 `hsv_*` 默认值是给**目标检测**用的，直接套到"**�
 
 **训练一次，永久使用** —— `models/*/best.pt` 就是模型的全部状态。
 
-**两个 .bat：** `run_server.bat`（起服务）、`camera.bat`（开摄像头）。
+**起服务、开摄像头——两条命令，都必须在项目根目录执行：**
+
+```bat
+:: 起 AI 服务（端口必须 8001：8000/7000 被系统占用，8080/5173 留给后端和前端）
+D:\Anaconda\envs\yolo\python.exe -m uvicorn ai.server.app:app --host 0.0.0.0 --port 8001
+
+:: 开摄像头实时识别
+D:\Anaconda\envs\yolo\python.exe -m ai.detect
+```
+
+必须用 conda 环境的绝对路径 `D:\Anaconda\envs\yolo\python.exe` ——
+PATH 里的 `python` 是微软商店的占位符，会**静默失败**（不报错也不启动）。
 
 ---
 
@@ -519,10 +545,11 @@ Ultralytics 的 `hsv_*` 默认值是给**目标检测**用的，直接套到"**�
 - [x] **架构解耦**：拆出 `config.py` / `engine.py` / `inference.py`
 - [x] **多模型支持**：模型注册表 + 一行切换
 - [x] **柿果成熟度分类模型**（4 类，**88.89%**）
-- [x] **检测模型**（单类别，mAP@0.5 = 88.23%）
+- [x] **检测模型**（单类别，mAP@0.5 = 90.87%）
 - [x] **修正数据增强参数并重训** —— 着色期召回 64% → 88%（原本预期 88~92%，达成）
 - [x] 推理服务化（FastAPI，8001）
-- [ ] ★ **补检测训练数据：远景小目标图 + 负样本**（当前最大的问题，见「已知问题 1」）
+- [x] **补检测训练数据：10 张远景小目标图（+443 框）** —— mAP 88.23% → **90.87%**
+- [ ] ★ **继续补远景图 + 负样本**（负样本仍为 0，整棵树漏检仍有约 70%）
 - [ ] 太行山采集的实拍照片整理进数据集
 - [ ] 补 `转色期` 样本（现在是分类最弱的一类）
 - [ ] 与他人对比实验（YOLO n/s/m/l 不同规模）
@@ -549,7 +576,7 @@ Ultralytics 的 `hsv_*` 默认值是给**目标检测**用的，直接套到"**�
 | `pip install` 说"已满足"，不升级到 CUDA 版 | CPU/CUDA 版基础版本号相同，需显式指定或 `--force-reinstall` | 用 `torch==2.14.0+cu126` 显式指定 |
 | 图表里中文变方块 | matplotlib 默认字体无中文字形 | `font.sans-serif = Microsoft YaHei` |
 | `cv2.putText` 写中文变 `????` | OpenCV 只支持 ASCII | 转成 PIL 图像写中文再转回 |
-| 中文在控制台对齐错乱 | 中文是全角字符，`str.ljust` 按字符数算 | 按显示宽度补空格（见 `predict.py` 的 `pad()`） |
+| 中文在控制台对齐错乱 | 中文是全角字符，`str.ljust` 按字符数算 | 按显示宽度补空格（见 `ai/detect.py` 的 `summarize()`） |
 | 自定义模块找不到（`import config` 失败） | PyCharm 的运行配置工作目录不对 | 脚本里用 `Path(__file__).resolve().parent` 定位，不依赖 cwd |
 | 项目根目录凭空多出 `Ultralytics/` | ultralytics 往 `YOLO_CONFIG_DIR` 下再套一层，那层不存在就退回根目录 | 提前建好 `.ultralytics/Ultralytics/`（见 `config.py`） |
 | `Failed to resolve 'github.com'` | 该域名解析被污染，返回 127.0.0.1 | 开代理，或把权重文件放进仓库 |
@@ -563,9 +590,9 @@ Ultralytics 的 `hsv_*` 默认值是给**目标检测**用的，直接套到"**�
 
 | 数据集 | 类别 | 训练 | 验证 | 合计 | 体积 | 在仓库里？ |
 |---|---|---|---|---|---|---|
-| `dataset_fruit&&vegetable` | 12（物种） | 841 | 391 | 1232 | 28 MB | ✅ 是 |
+| `dataset_fruit_vegetable` | 12（物种） | 841 | 391 | 1232 | 28 MB | ✅ 是 |
 | `dataset_persimmon` | 4（成熟度） | **353** | 90 | **443** | 191 MB | ❌ **未上传，源图已丢失** |
-| `dataset_persimmon_det` | 1（检测） | 82 | 16 | 98 | — | ✅ 是 |
+| `dataset_persimmon_det` | 1（检测） | 92 | 16 | 108 | — | ✅ 是 |
 
 > **训练集从 356 变成了 353**（2026-10-05 实测 `val()` 时发现的）。
 > 逐类数字需要重新数一遍，暂以总数 353 为准。

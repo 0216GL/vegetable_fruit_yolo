@@ -81,7 +81,7 @@ web/
 
 ```bat
 cd /d D:\vegetable_fruit_yolo
-run_server.bat              :: Python AI 服务，8001
+D:\Anaconda\envs\yolo\python.exe -m uvicorn ai.server.app:app --host 0.0.0.0 --port 8001
 ```
 
 ```bat

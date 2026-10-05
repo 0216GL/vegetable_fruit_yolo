@@ -1,4 +1,4 @@
-"""
+r"""
 P0 —— Python 推理服务（FastAPI）
 
 把两层模型包成 HTTP 接口，给前端 / Java 后端调用。
@@ -10,14 +10,14 @@ P0 —— Python 推理服务（FastAPI）
 
 启动（★ 必须在【项目根目录】下执行，因为要 import ai 这个包）：
     cd /d D:\vegetable_fruit_yolo
-    uvicorn ai.server.app:app --host 0.0.0.0 --port 8001
-或者双击根目录的 run_server.bat
+    D:\Anaconda\envs\yolo\python.exe -m uvicorn ai.server.app:app --host 0.0.0.0 --port 8001
+（不再提供 .bat 启动脚本，上面两条命令就是完整的启动方式）
 
 【端口为什么是 8001 不是 8000】
     这台机器上 8000 和 7000 被系统挡住了（WinError 10013），
     实测 8001/8002/5001/3000/5173 都可用。
     也刻意避开 8080（Spring Boot 默认）和 5173（Vite 默认），免得以后打架。
-    换端口：改 run_server.bat 里的 PORT 即可。
+    换端口：把上面命令末尾的 --port 8001 改成 8002 或 5001 即可（别再试 8000）。
 
 【几个关键设计】
 

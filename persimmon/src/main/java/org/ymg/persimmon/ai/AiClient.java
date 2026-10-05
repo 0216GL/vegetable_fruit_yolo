@@ -109,7 +109,9 @@ public class AiClient {
             // 连 TCP 都没建立起来，说明服务根本没起
             log.error("无法连接 AI 服务 {}：{}", predictUrl, e.getMessage());
             throw new BizException(ErrorCode.AI_SERVICE_UNAVAILABLE,
-                    "AI 服务连不上。请先启动 Python 服务（双击项目根目录的 run_server.bat）");
+                    "AI 服务连不上。请先在项目根目录执行："
+                            + "D:\\Anaconda\\envs\\yolo\\python.exe -m uvicorn "
+                            + "ai.server.app:app --host 0.0.0.0 --port 8001");
         }
 
         log.debug("AI 调用完成，HTTP {}，耗时 {} ms",

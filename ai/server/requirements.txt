@@ -4,7 +4,7 @@
 #  安装：
 #      conda activate yolo
 #      cd /d D:\vegetable_fruit_yolo
-#      pip install -r requirements-server.txt
+#      D:\Anaconda\envs\yolo\python.exe -m pip install -r ai\server\requirements.txt
 #
 #  这些包都很小（uvicorn 的 standard 版会带 websockets，P6 做实时摄像头要用）
 # ==============================================================================
