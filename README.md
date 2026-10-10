@@ -48,6 +48,9 @@
 
 **需要三个进程，缺一不可。**
 
+> **启动前确认两件事：** ① `persimmon/src/main/resources/application.yaml` 里**数据库密码已填**；
+> ② MySQL 的 `region` 表**至少有一条数据**（否则上传报 `4004`、前端区域下拉框为空、提交按钮点不动）。
+
 ```bat
 :: ① AI 服务（8001）—— 先起这个，另外两个都依赖它
 cd /d D:\vegetable_fruit_yolo
@@ -91,8 +94,8 @@ npm run dev
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 系统架构、关键设计取舍、分阶段路线图 | 答辩前 |
 | [`docs/FRONTEND_DESIGN.md`](docs/FRONTEND_DESIGN.md) | 前端设计、五页面清单、设计令牌 | 改前端时 |
 | [`docs/DESIGN_WORKSHEET.md`](docs/DESIGN_WORKSHEET.md) | 数据库设计的方法（七步）与练习 | 回顾设计思路 |
-| [`persimmon/README.md`](persimmon/README.md) | Java 后端：哪些已搭好、哪些要写、三个必踩的坑 | 写 Java 时 |
-| [`web/README.md`](web/README.md) | 前端：怎么跑、三条不能破的规矩 | 改前端时 |
+| [`persimmon/README.md`](persimmon/README.md) | Java 后端：目录结构、四个接口、Spring Boot 4 的坑 | 改 Java 时 |
+| [`web/README.md`](web/README.md) | 前端：五页面、两个表面、三条不能破的规矩 | 改前端时 |
 
 ---
 
@@ -101,7 +104,7 @@ npm run dev
 > 以下是原 README，讲的是根目录 Python 脚本那部分（模型、训练、实验数据、踩过的坑）。
 > 内容仍然有效，保留在这里。
 
-## 柿果成熟度识别 · 蔬菜水果分类
+## 太行智农 · 柿果成熟度智能分级（一期）
 
 用 Ultralytics **YOLO11** 做迁移学习。**两层结构**：先检测出每颗柿子在哪儿，再判它的成熟度。
 
@@ -273,7 +276,11 @@ vegetable_fruit_yolo/
 │   │   ├── common/                 统一响应体、错误码、全局异常
 │   │   ├── config/                 跨域、HTTP 客户端
 │   │   ├── ai/                     调 Python 服务
-│   │   └── entity/ mapper/ service/ controller/   ⬜ 待写
+│   │   ├── entity/                 表实体（Region / Capture）
+│   │   ├── dto/                    接口 VO（CaptureListItem）
+│   │   ├── mapper/                 SQL 接口（Region / Capture）
+│   │   ├── service/                业务逻辑（Region / Capture）
+│   │   └── controller/             四个接口 + 健康检查
 │   ├── src/main/resources/
 │   │   ├── application.yaml        数据库 + MyBatis 配置
 │   │   └── db/schema.sql           ★ 建表 SQL（已执行）
@@ -559,11 +566,14 @@ PATH 里的 `python` 是微软商店的占位符，会**静默失败**（不报�
 - [x] Java 后端骨架（`persimmon/`）
 - [x] 数据库设计与建表（`region` / `capture` / `notification`）
 - [x] 前端五页面（`web/`）
-- [ ] Java 业务层：Entity / Mapper / Service / Controller
-- [ ] 历史页与大屏接真实数据
+- [x] **Java 业务层：Entity / Mapper / Service / Controller**（2026-10-05）
+- [x] **四个接口全通**（predict / list / region/list / health）
+- [x] **★ 全链路跑通**：上传 → 识别 → 落库 → 历史查询（2026-10-05 实测出记录）
+- [ ] 大屏接统计接口（现在读内存里的最近一次结果，没调 `/stats/overview`）
 - [ ] 比赛材料（商业计划书、PPT、技术报告）
 
-**明确不做：** 登录与鉴权、病虫害识别、多地块管理、边缘设备部署（构想，未验证）
+**明确不做：** 登录与鉴权、病虫害识别、多地块管理
+（**边缘设备部署不在此列** —— 它是二期目标，见 `PRODUCT.md` 与 `docs/EDGE_DEPLOY.md`）
 
 ---
 
