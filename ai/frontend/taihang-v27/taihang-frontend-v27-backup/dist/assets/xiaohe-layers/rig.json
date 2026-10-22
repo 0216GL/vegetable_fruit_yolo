@@ -1,0 +1,42 @@
+{
+  "canvas": [
+    567,
+    850
+  ],
+  "type": "CSS layered PNG rig, not Cubism Live2D",
+  "layers": [
+    "hair-side-right.png",
+    "eye-right.png",
+    "eye-left.png",
+    "body-clothes.png",
+    "hair-bangs.png",
+    "legs.png",
+    "lid-upper-right.png",
+    "lid-lower-right.png",
+    "lid-lower-left.png",
+    "skirt.png",
+    "hair-side-left.png",
+    "face-base.png",
+    "lid-upper-left.png",
+    "mouth.png"
+  ],
+  "source": "Original Xiaohe with AI featureless-face underpainting; transparent aligned PNG cuts.",
+  "pivots": {
+    "eye-left": [
+      251,
+      181
+    ],
+    "eye-right": [
+      322,
+      169
+    ],
+    "hair": [
+      285,
+      105
+    ],
+    "skirt": [
+      286,
+      448
+    ]
+  }
+}
