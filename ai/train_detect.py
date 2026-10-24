@@ -160,7 +160,9 @@ def save_model(best_path):
     shutil.copy2(best_path, dst)
     print(f"  模型文件    {dst}")
     print(f"              大小 {dst.stat().st_size / 2**20:.2f} MB")
-    print(f"              （detect.py 读的就是这个路径）")
+    print(f"  注意：config.DETECT['weights'] 决定推理读哪个文件。")
+    print(f"        如果改了训练数据，建议把 weights/last.pt 也复制过来比对：")
+    print(f"        copy \"{best_path.parent / 'last.pt'}\" \"{out_dir / 'last.pt'}\"")
     return out_dir
 
 
@@ -175,7 +177,15 @@ def evaluate(best_path):
         print(f"  [跳过] 找不到模型: {best_path}")
         return
 
-    metrics = YOLO(str(best_path)).val(data=str(CONFIG["data"]), split="val")
+    # 必须显式指定 project/name，否则 ultralytics 会在 runs/detect/ 下自动新建
+    # val、val-2、val-3… 每评估一次多一个目录，runs/ 很快就乱掉
+    metrics = YOLO(str(best_path)).val(
+        data=str(CONFIG["data"]),
+        split="val",
+        project=str(ROOT / "runs" / "detect"),
+        name=CONFIG["name"],
+        exist_ok=True,
+    )
 
     print()
     box = getattr(metrics, "box", None)

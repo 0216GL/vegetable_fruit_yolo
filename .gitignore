@@ -86,3 +86,7 @@ Desktop.ini
 #                                        混淆矩阵（`runs/classify/` 下的那 2 张除外，见上）、PR/F1 曲线、detect/*/、
 #                                        detect_predict/*_det.jpg
 # ==============================================================================
+
+# 本机图片存储（storage.mode=local 时落盘，别进仓库）
+data/images/
+

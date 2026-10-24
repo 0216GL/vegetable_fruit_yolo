@@ -7,7 +7,7 @@
 FastAPI 会用这些模型自动生成 /docs 接口文档。
 """
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -21,7 +21,7 @@ class ImageInfo(BaseModel):
 
 
 class Detection(BaseModel):
-    """一个柿子 = 一个框 + 一个成熟度判定。"""
+    """一个果实 = 一个框 + 一个成熟度判定。"""
 
     box: List[int] = Field(..., description="像素坐标 [x1, y1, x2, y2]，原点在左上角")
     det_conf: float = Field(..., ge=0, le=1, description="第 1 层（检测）置信度")
@@ -51,11 +51,15 @@ class PredictResponse(BaseModel):
     """识别一张图的完整结果。"""
 
     ok: bool = Field(..., description="是否成功。false 时看 error")
+    species: Optional[str] = Field(
+        None, description="本次识别用的果品品种：persimmon / apple"
+    )
     image: ImageInfo
-    detections: List[Detection] = Field(default_factory=list, description="检出的每个柿子")
+    detections: List[Detection] = Field(default_factory=list, description="检出的每个果实")
     counts: Dict[str, int] = Field(
         default_factory=dict,
-        description="各类成熟度的数量统计，键为 1_unripe/2_turning/3_coloring/4_full",
+        description="各成熟度等级的数量统计，键跟着该品种的类别走"
+                    "（柿子 4 类 1_unripe~4_full，苹果 3 类 1_unripe/2_turning/3_mature）",
     )
     timing: Timing
     error: Optional[str] = Field(None, description="失败原因；成功时为 null")
@@ -64,6 +68,7 @@ class PredictResponse(BaseModel):
         "json_schema_extra": {
             "example": {
                 "ok": True,
+                "species": "persimmon",
                 "image": {"width": 1280, "height": 1714},
                 "detections": [
                     {
@@ -84,8 +89,15 @@ class PredictResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = Field(..., description="ok / degraded")
-    models_ready: bool = Field(..., description="两个模型文件是否都在")
-    detail: Dict[str, str] = Field(default_factory=dict, description="各层的权重路径")
+    models_ready: bool = Field(..., description="默认品种的两个模型文件是否都在")
+    detail: Dict[str, Any] = Field(
+        default_factory=dict, description="各层权重路径、默认品种、支持的品种列表"
+    )
+
+
+class ErrorResponse(BaseModel):
+    ok: bool = False
+    error: str
 
 
 class ErrorResponse(BaseModel):

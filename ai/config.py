@@ -36,7 +36,18 @@ except Exception:
 # 1. 模型注册表 —— 要加新模型，在这里加一项
 # ==============================================================================
 
-ACTIVE_MODEL = "persimmon"      # ★ 切换模型：改这一行（persimmon / species）
+ACTIVE_MODEL = "persimmon"      # ★ 默认品种：persimmon / apple / species
+
+# ==============================================================================
+# 模型注册表 —— 一个品种 = 一套「检测模型 + 成熟度分类模型」
+#
+# 每个条目里有三层信息：
+#   det       第 1 层检测模型（找果实在哪）
+#   run       第 2 层分类模型的训练代号 → models/<run>/best.pt
+#   conf/iou/margin   该品种自己的推理阈值（各品种分布不同，不能共用一套）
+#
+# 加新品种 = 在这里加一项，核心代码不用动。
+# ==============================================================================
 
 MODELS = {
     "persimmon": {
@@ -44,14 +55,42 @@ MODELS = {
         "run":       "persimmon_cls_v1",        # 训练代号 = models/ 下的目录名
         "dataset":   ROOT / "dataset" / "dataset_persimmon",
         "threshold": 0.0,       # 各类太像，模型过度自信，加阈值无益 → 不拒识
+
+        # ---- 该品种的检测模型与推理阈值 ----
+        "det":       ROOT / "models" / "persimmon_det_v2" / "last.pt",
+        "conf":      0.40,
+        "iou":       0.55,
+        "margin":    0.06,
+    },
+    "apple": {
+        "label":     "苹果成熟度（3级）",
+        "run":       "apple_cls_v1",
+        "dataset":   ROOT / "dataset" / "dataset_apple_ripeness",
+        "threshold": 0.0,
+
+        "det":       ROOT / "models" / "apple_det_v1" / "best.pt",
+        "conf":      0.40,
+        "iou":       0.55,
+        "margin":    0.06,
     },
     "species": {
         "label":     "蔬菜水果（12类）",
         "run":       "fruits_cls_v1",
         "dataset":   ROOT / "dataset" / "dataset_fruit_vegetable",
         "threshold": 0.60,      # 物种之间差异大，拒识有效
+
+        # 12 类蔬果是纯分类任务，没有检测模型 → 只能对整张图分类
+        "det":       None,
+        "conf":      0.40,
+        "iou":       0.55,
+        "margin":    0.06,
     },
 }
+
+
+def list_species():
+    """可用于「上传识别」的品种（必须有检测模型）。"""
+    return [k for k, v in MODELS.items() if v.get("det") is not None]
 
 
 def get_model_info(key=None):
@@ -96,29 +135,20 @@ def get_default_input(key=None):
 
 
 # ==============================================================================
-# 4. 摄像头参数
-# ==============================================================================
-
-CAMERA = {
-    "index": 0,         # 0 = 笔记本自带，1 = 外接
-    "width": 640,
-    "height": 480,
-    "mirror": True,     # 画面镜像（像照镜子，看着自然）
-    "smooth_n": 5,      # 结果平滑：取最近 N 帧里出现最多的结果
-}
-
-
-# ==============================================================================
-# 5. 类别中文显示名
+# 4. 类别中文显示名
 # 键 = 模型输出的类名（必须和训练时的文件夹名完全一致）
 # 没登记的类名原样显示
 # ==============================================================================
 
 CLASS_LABELS = {
+    # 柿子（4 级）
     "1_unripe":   "未熟（青绿）",
     "2_turning":  "转色期（黄橙）",
     "3_coloring": "着色期（橙红）",
     "4_full":     "完熟（深红）",
+
+    # 苹果（3 级）—— 1_unripe / 2_turning 复用上面的名字
+    "3_mature":   "成熟（着色充分）",
 }
 
 
@@ -145,8 +175,16 @@ IMAGE_EXT = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 # ==============================================================================
 
 DETECT = {
-    "run":     "persimmon_det_v1",                          # 训练代号
-    "weights": ROOT / "models" / "persimmon_det_v1" / "best.pt",
+    "run":     "persimmon_det_v2",                          # 训练代号（下次训练写到 runs/detect/ 下同名目录）
+
+    # ⚠️ 这里用的是 last.pt（最后一轮），不是 best.pt（第 33 轮）。
+    #    best.pt 是 Ultralytics 按 fitness = 0.1*mAP50 + 0.9*mAP50-95 选出来的，
+    #    更看重"框得准"；而远景整树场景看重"找得到"，实测 last.pt 更好：
+    #        远景测试集 mAP50    best 47.28%   last 52.87%
+    #        远景召回           best 50.45%   last 57.66%
+    #    近景验证集 marginally 差 0.6 个点，可接受。详见 docs/MODEL_REPORT.md
+    "weights": ROOT / "models" / "persimmon_det_v2" / "last.pt",
+
     "dataset": ROOT / "dataset" / "dataset_persimmon_det",  # 里面是 images/ + labels/
 
     # ---- 两个阈值：管的是完全不同的两件事 ----

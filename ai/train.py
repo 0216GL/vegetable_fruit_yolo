@@ -17,7 +17,7 @@ CONFIG = {
 
     # 以下两项来自 config.py，要改数据集/代号请去 config.py 改
     "data": INFO["dataset"],        # 里面必须有 train/ 和 val/，各自按类别分文件夹
-    "name": INFO["run"],            # 训练代号，决定 runs/<name>/ 和 models/<name>/
+    "name": INFO["run"],            # 训练代号，决定 runs/classify/<name>/ 和 models/<name>/
 
     # 训练轮数
     "epochs": 100,
@@ -42,7 +42,7 @@ CONFIG = {
     "auto_augment": None,     # ⚠️ 必须写 None。写字符串 "none" 会抛 ValueError
     "erasing": 0.15,          # 默认 0.4 太容易把果实整个遮掉
     "fliplr": 0.5,            # 随机水平翻转
-    "patience": 10,           # 连续 10 轮验证集没提升就早停
+    "patience": 30,           # 连续 10 轮验证集没提升就早停
 }
 
 
@@ -139,7 +139,7 @@ def train():
     print(f"  轮数 (epochs)   {CONFIG['epochs']}   早停 patience={CONFIG['patience']}")
     print(f"  输入尺寸        {CONFIG['imgsz']} × {CONFIG['imgsz']}")
     print(f"  批大小 (batch)  {CONFIG['batch']}")
-    print(f"  训练日志目录    runs/{CONFIG['name']}/")
+    print(f"  训练日志目录    runs/classify/{CONFIG['name']}/")
     print()
 
     model = YOLO(str(CONFIG["pretrained"]))
@@ -150,7 +150,8 @@ def train():
         epochs=CONFIG["epochs"],
         imgsz=CONFIG["imgsz"],
         batch=CONFIG["batch"],
-        project=str(ROOT / "runs"),
+        # 分类的训练记录放 runs/classify/，和检测的 runs/detect/ 保持对称
+        project=str(ROOT / "runs" / "classify"),
         name=CONFIG["name"],
         exist_ok=True,
         seed=CONFIG["seed"],
@@ -166,7 +167,7 @@ def train():
     )
 
     # 每轮结束 YOLO 都会在验证集上测一次，把"历史最好"存成 best.pt
-    best = ROOT / "runs" / CONFIG["name"] / "weights" / "best.pt"
+    best = ROOT / "runs" / "classify" / CONFIG["name"] / "weights" / "best.pt"
     return best
 
 
@@ -203,7 +204,15 @@ def evaluate(best_path):
         print(f"  [跳过] 找不到模型: {best_path}")
         return
 
-    metrics = YOLO(str(best_path)).val(data=str(CONFIG["data"]), split="val")
+    # 必须显式指定 project/name，否则 ultralytics 会在 runs/classify/ 下自动新建
+    # val、val-2、val-3… 每评估一次多一个目录，runs/ 很快就乱掉
+    metrics = YOLO(str(best_path)).val(
+        data=str(CONFIG["data"]),
+        split="val",
+        project=str(ROOT / "runs" / "classify"),
+        name=CONFIG["name"],
+        exist_ok=True,
+    )
 
     # ultralytics 不同版本字段名略有差异，用 getattr 兼容
     print()
@@ -237,7 +246,7 @@ def main():
     title("全部完成")
     print(f"  总耗时      {(time.time() - started) / 60:.1f} 分钟")
     print(f"  模型        {out_dir / 'best.pt'}")
-    print(f"  训练日志    {ROOT / 'runs' / CONFIG['name']}")
+    print(f"  训练日志    {ROOT / 'runs' / 'classify' / CONFIG['name']}")
     print()
     print("  下一步：python predict.py")
     return 0

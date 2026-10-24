@@ -50,7 +50,7 @@ DET_IMGSZ = 640                      # 检测输入尺寸，必须和训练时�
 RIPENESS_CLASSES = ["1_unripe", "2_turning", "3_coloring", "4_full"]
 
 _LOCK = threading.Lock()             # 单卡 GPU 串行化
-_DET = {}                            # 检测模型缓存
+_DET = {}                            # 检测模型缓存：{品种: model}，每个品种只加载一次
 
 
 # ==============================================================================
@@ -69,33 +69,49 @@ def read_image(path):
 # ==============================================================================
 # 模型加载
 # ==============================================================================
-def load_detector(verbose=True):
-    """加载第 1 层检测模型（同一个进程只加载一次）。"""
-    weights = config.DETECT["weights"]
+def load_detector(key=None, verbose=True):
+    """加载指定品种的第 1 层检测模型（同一品种只加载一次，按品种缓存）。"""
+    key = key or config.ACTIVE_MODEL
+    info = config.get_model_info(key)
+    weights = info.get("det")
+
+    if weights is None:
+        raise RuntimeError(
+            f"品种 {key!r}（{info['label']}）没有检测模型，只能整图分类，不能做上传识别。\n"
+            f"       可用于上传识别的品种：{config.list_species()}"
+        )
     if not weights.exists():
         raise FileNotFoundError(
-            f"找不到检测模型：{weights}\n"
-            f"       请先训练：python train_detect.py"
+            f"找不到品种 {key!r} 的检测模型：{weights}\n"
+            f"       请先训练：python -m ai.train_detect"
         )
-    if "m" not in _DET:
+
+    if key not in _DET:
         from ultralytics import YOLO
         t0 = time.time()
-        _DET["m"] = YOLO(str(weights))
+        _DET[key] = YOLO(str(weights))
         if verbose:
-            print(f"检测模型已加载  {weights.name}  ({(time.time() - t0) * 1000:.0f} 毫秒)")
-    return _DET["m"]
+            print(f"检测模型已加载  [{info['label']}]  {weights.name}  ({(time.time() - t0) * 1000:.0f} 毫秒)")
+    return _DET[key]
 
 
-def load(verbose=True):
-    """预加载两层模型。服务启动时调一次，之后所有请求复用。"""
-    det = load_detector(verbose=verbose)
-    engine.load_model(verbose=verbose)
+def load(key=None, verbose=True):
+    """预加载一个品种的两层模型。服务启动时调一次，之后所有请求复用。"""
+    key = key or config.ACTIVE_MODEL
+    det = load_detector(key, verbose=verbose)
+    engine.load_model(key, verbose=verbose)
     return det
 
 
-def is_ready():
-    """两个模型文件都在不在（给 /health 用的）。"""
-    return config.DETECT["weights"].exists() and engine.is_ready()
+def is_ready(key=None):
+    """指定品种的两层模型文件都在不在（给 /health 用的）。"""
+    key = key or config.ACTIVE_MODEL
+    try:
+        info = config.get_model_info(key)
+        det = info.get("det")
+        return det is not None and det.exists() and engine.is_ready(key)
+    except Exception:
+        return False
 
 
 # ==============================================================================
@@ -119,12 +135,15 @@ def crop_box(frame, xyxy, margin):
 # 内部：真正的两层推理（调用方自己保证加锁）
 # ==============================================================================
 def _run(frame, key=None):
-    det_model = load_detector(verbose=False)
+    key = key or config.ACTIVE_MODEL
+    info = config.get_model_info(key)
+
+    det_model = load_detector(key, verbose=False)
 
     t0 = time.time()
     r = det_model.predict(source=frame, imgsz=DET_IMGSZ,
-                          conf=config.DETECT["conf"],
-                          iou=config.DETECT["iou"],  # NMS 阈值，压重复框
+                          conf=info["conf"],     # 该品种自己的置信度门槛
+                          iou=info["iou"],       # NMS 阈值，压重复框
                           verbose=False)[0]
     det_ms = (time.time() - t0) * 1000
 
@@ -134,7 +153,7 @@ def _run(frame, key=None):
     if r.boxes is not None:
         for box in r.boxes:
             xyxy = box.xyxy[0].cpu().numpy()
-            crop = crop_box(frame, xyxy, config.DETECT["margin"])
+            crop = crop_box(frame, xyxy, info["margin"])
             if crop is None:
                 continue
 
@@ -170,7 +189,9 @@ def predict(frame, key=None):
     h, w = frame.shape[:2]
 
     try:
-        engine.load_model(key, verbose=False)
+        # 先把该品种的两个模型都解析出来，缺哪个当场报错，而不是跑到一半才崩
+        _, names, _ = engine.load_model(key, verbose=False)
+        load_detector(key, verbose=False)
     except Exception as e:
         return _result(w, h, error=str(e))
 
@@ -181,12 +202,15 @@ def predict(frame, key=None):
     except Exception as e:
         return _result(w, h, error=f"推理失败：{e}")
 
-    counts = {c: 0 for c in RIPENESS_CLASSES}
+    # 统计键跟着该品种的类别走：柿子 4 类、苹果 3 类
+    counts = {n: 0 for n in names}
     for d in detections:
         if d["ripeness"] in counts:
             counts[d["ripeness"]] += 1
 
-    return _result(w, h, detections, counts, det_ms, cls_ms)
+    out = _result(w, h, detections, counts, det_ms, cls_ms)
+    out["species"] = key or config.ACTIVE_MODEL
+    return out
 
 
 def predict_file(path, key=None):

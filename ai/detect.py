@@ -4,18 +4,12 @@
     第 1 层  检测   models/persimmon_det_v1/best.pt   找出每个柿子的位置（1 类，不管成熟度）
     第 2 层  分类   models/persimmon_cls_v1/best.pt   把框里的图裁出来判成熟度
 
-    python detect.py                   开摄像头（默认，等价于 detect.py 0）
-    python detect.py 1                 换摄像头编号（1 = 外接）
     python detect.py "某张图.jpg"        测单张
     python detect.py "某个文件夹"        测整个文件夹（结果存到 runs/detect_predict/）
     python detect.py -m species ...    换第二层的分类模型
-
-摄像头模式键盘：q 退出   s 存图
 """
 
 import sys
-import time
-from collections import Counter, deque
 from pathlib import Path
 
 import numpy as np
@@ -171,129 +165,19 @@ def run_folder(folder, font, key=None):
 
 
 # ==============================================================================
-# 时序平滑 —— 消掉摄像头里标签乱跳的问题
-#
-# 原理：同一颗果子在相邻帧里位置差不多，用 IoU 把前后两帧的框关联起来，
-#       每个目标保存最近 N 帧的分类结果，显示"N 帧里出现最多的那个"。
-#       没有这一步的话，每一帧独立分类，标签会一直闪
-#       （一帧"转色期"、下一帧"完熟"）。
-# ==============================================================================
-def _iou(a, b):
-    ax1, ay1, ax2, ay2 = a
-    bx1, by1, bx2, by2 = b
-    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
-    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
-    inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
-    if inter <= 0:
-        return 0.0
-    union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter
-    return inter / union if union > 0 else 0.0
-
-
-class LabelSmoother:
-    """给每个目标维护一小段历史，输出多数投票的结果。"""
-
-    def __init__(self, n=None, thr=0.4):
-        self.n = n or config.CAMERA["smooth_n"]
-        self.thr = thr
-        self.tracks = []        # [{"box":..., "labels": deque, "confs": deque}]
-
-    def smooth(self, results):
-        """就地给每个结果补上 smooth_class / smooth_conf 两个字段。"""
-        matched = [False] * len(results)
-        alive = []
-
-        for t in self.tracks:
-            best, bi = 0.0, -1
-            for i, d in enumerate(results):
-                if matched[i]:
-                    continue
-                v = _iou(t["box"], d["box"])
-                if v > best:
-                    best, bi = v, i
-            if bi >= 0 and best >= self.thr:
-                d = results[bi]
-                matched[bi] = True
-                t["box"] = d["box"]
-                t["labels"].append(d["ripeness"])
-                t["confs"].append(d["ripeness_conf"])
-                d["smooth_class"] = Counter(t["labels"]).most_common(1)[0][0]
-                d["smooth_conf"] = sum(t["confs"]) / len(t["confs"])
-                alive.append(t)
-
-        # 这一帧新出现的目标，开一条新轨迹
-        for i, d in enumerate(results):
-            if matched[i]:
-                continue
-            alive.append({"box": d["box"],
-                          "labels": deque([d["ripeness"]], maxlen=self.n),
-                          "confs": deque([d["ripeness_conf"]], maxlen=self.n)})
-            d["smooth_class"] = d["ripeness"]
-            d["smooth_conf"] = d["ripeness_conf"]
-
-        self.tracks = alive
-        return results
-
-
-# ==============================================================================
-# 摄像头
-# ==============================================================================
-def run_camera(index, font, key=None):
-    cap = cv2.VideoCapture(index)
-    if not cap.isOpened():
-        print(f"[错误] 打不开摄像头 {index} 号（可能被别的程序占用，或换个编号试试）")
-        return
-
-    print("摄像头已打开。q 退出，s 存图。")
-    frames = 0
-    t_start = time.time()
-    smoother = LabelSmoother()
-
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            print("[警告] 读不到画面")
-            break
-        if config.CAMERA["mirror"]:
-            frame = cv2.flip(frame, 1)
-
-        out = inference.predict(frame, key=key)
-        results = smoother.smooth(out["detections"])      # 时序平滑，防标签乱跳
-        frame = draw_results(frame, results, font)
-
-        frames += 1
-        det_ms = out["timing"]["detect_ms"]
-        cls_ms = out["timing"]["classify_ms"]
-        fps = frames / max(1e-6, time.time() - t_start)
-        status = f"柿子 {len(results)} 个    检测 {det_ms:.0f}ms + 分类 {cls_ms:.0f}ms    FPS {fps:.1f}"
-        frame = put_chinese(frame, [(status, (14, frame.shape[0] - 32), (170, 170, 170), True)], font)
-
-        cv2.imshow("Persimmon Detect + Ripeness  (q=quit, s=snap)", frame)
-
-        k = cv2.waitKey(1) & 0xFF
-        if k == ord("q"):
-            break
-        if k == ord("s"):
-            OUT_DIR.mkdir(parents=True, exist_ok=True)
-            p = OUT_DIR / time.strftime("snap_%Y%m%d_%H%M%S.jpg")
-            ok2, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
-            if ok2:
-                buf.tofile(str(p))
-            print(f"已存图  {p}")
-
-    cap.release()
-    cv2.destroyAllWindows()
-
-
-# ==============================================================================
 # 主流程
 # ==============================================================================
 def main():
     key, args = config.take_model_arg(sys.argv[1:])
 
-    # 不带参数 = 直接开摄像头（和以前的 camera.py 一样，PyCharm 里点绿三角就能开）；
-    # 想测图片就显式给一个路径
-    target = args[0] if args else str(config.CAMERA["index"])
+    # 必须显式给一个图片路径或文件夹（摄像头实时识别已暂停，专注服务器部署）
+    if not args:
+        print("用法：")
+        print("  python -m ai.detect \"某张图.jpg\"      测单张")
+        print("  python -m ai.detect \"某个文件夹\"       测整个文件夹")
+        print("  python -m ai.detect -m species <路径>  换第二层的分类模型")
+        return 1
+    target = args[0]
 
     info = config.get_model_info(key)
     print("=" * 70)
@@ -309,18 +193,14 @@ def main():
 
     font = find_font(22)
 
-    # 纯数字 = 摄像头编号
-    if target.isdigit():
-        run_camera(int(target), font, key)
+    p = Path(target)
+    if not p.exists():
+        print(f"\n[错误] 路径不存在：{p}")
+        return 1
+    if p.is_dir():
+        run_folder(p, font, key)
     else:
-        p = Path(target)
-        if not p.exists():
-            print(f"\n[错误] 路径不存在：{p}")
-            return 1
-        if p.is_dir():
-            run_folder(p, font, key)
-        else:
-            run_image(p, font, key)
+        run_image(p, font, key)
     return 0
 
 

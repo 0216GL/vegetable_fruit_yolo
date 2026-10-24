@@ -154,8 +154,8 @@
 | 阶段 | 内容 | 完成后能演示什么 | 状态（2026-10-05） |
 |---|---|---|---|
 | **P0** | AI 两层模型 + FastAPI 服务 | 浏览器拖一张图 → 返回每个柿子的框和成熟度 | ✅ 已完成（检测层的短板见 A1，已部分改善） |
-| **P1** | Java 后端骨架 | Spring Boot 起得来、能调 AI | ✅ 骨架已搭（`persimmon/`） |
-| **P2** | 接 MySQL，采集记录落库 | 上传 → 识别 → 存库 → 查到历史列表 | 🔨 **进行中**：表已建（`schema.sql`），业务层在写 |
+| **P1** | Java 后端骨架 | Spring Boot 起得来、能调 AI | ✅ **已完成**（`persimmon/`，业务层也写完了） |
+| **P2** | 接 MySQL，采集记录落库 | 上传 → 识别 → 存库 → 查到历史列表 | ✅ **已完成**（2026-10-05 全链路实测跑通，历史页出记录） |
 | ~~P3~~ | ~~用户体系 + JWT + Redis~~ | — | ❌ **不做**（工作量约等于现有前端的 1/2，换不到等值展示） |
 | **P4** | 统计看板接口 | "本周可采收率 62%，较上周 +8%" | ⏳ 待做 |
 | **P5** | Vue 前端 | 手机上传 → 看结果 → 看历史；大屏投影 | ✅ **已完成**（五页面能跑，对比度已实测） |
@@ -203,24 +203,29 @@ region                      一个区域
 capture                     一次采集（三张里长得最快的）
 ├ id
 ├ region_id        → region.id
+├ species                   品种：persimmon / apple —— 它决定 ripeness 怎么读
 ├ captured_at               采集时刻
-├ image_path                原图【相对】路径
-├ count_unripe              四类果实的数量
-├ count_turning             （不是"一个成熟度"字段 ——
-├ count_coloring             一次采集会同时看到四类，
-├ count_full                 存一个值根本表达不了）
-├ detect_ms, classify_ms    两层耗时（诊断用）
-└ create_time
+├ image_path                原图【相对】路径（图片落盘还没做，暂时 NULL）
+└ ripeness                  各级果实数量，逗号分隔：
+                            persimmon → "0,2,4,17"  = 未熟0/转色期2/着色期4/完熟17
+                            apple     → "1,3,8"     = 未熟1/转色期3/成熟8
+                            （不是"一个成熟度"字段 —— 一张图平均 7.3 颗果、最多 43 颗，
+                              53/99 张图同时出现 2 个以上等级，存一个值根本表达不了）
 
-notification                一条通知
+notification                一条通知（结构已对齐，但还没有代码在用）
 ├ id
 ├ region_id        → region.id
+├ species                   品种：persimmon / apple
 ├ triggered_at              触发时刻
-├ count_unripe / turning / coloring / full   触发【当时】的数量快照
+├ ripeness                  触发【当时】的数量快照，格式同 capture.ripeness
 ├ message                   给用户看的一句话
 ├ is_read                   0=未读 1=已读
 └ create_time
 ```
+
+> 等级顺序（"第几位是哪个等级"）只在 Java 的
+> `org.ymg.persimmon.common.RipenessCodec` 里定义一份，改等级只改那里。
+> `total` / `readyRate` / 中文摘要都不存库，列表接口现算。
 
 ### 和原版比，改了什么、为什么
 

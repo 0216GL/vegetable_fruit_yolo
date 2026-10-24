@@ -19,7 +19,7 @@ import java.util.Map;
  * <pre>
  * 表 capture 里有的：   id、create_time        ← AI 不返回
  * AI 返回但表里不存的：  detections[]（每颗果的框）← 我们决定不存
- * 两边名字不同的：       counts{...} → 四个 count_xxx 列
+ * 两边名字不同的：       counts{...} → 编码成 capture.ripeness 一列
  * </pre>
  *
  * 转换在 Service 里做，两个类各管各的。
@@ -34,6 +34,10 @@ public record AiPredictResponse(
 
         @JsonProperty("ok")
         boolean ok,
+
+        /** 本次识别用的果品品种：persimmon / apple（Python 端 2026-10 新增） */
+        @JsonProperty("species")
+        String species,
 
         @JsonProperty("image")
         Image image,

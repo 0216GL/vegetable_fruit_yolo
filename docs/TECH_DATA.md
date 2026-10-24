@@ -25,10 +25,10 @@ YOLO('models/persimmon_cls_v1/best.pt').val(data='dataset/dataset_persimmon', sp
 
 **原因推测：** README 描述的是**修正数据增强参数之前**那次训练（目录名叫 `fruits_cls_v2`），
 而现在的 `models/persimmon_cls_v1/best.pt` 是改完之后重训的。
-`runs/persimmon_cls_v1/args.yaml` 里存的就是修正后的参数。
+`runs/classify/persimmon_cls_v1/args.yaml` 里存的就是修正后的参数。
 
 > ⚠️ **下面第 7 节里那份"逐类准确率"是按旧的 84.44% 算的，同样作废。**
-> 需要重新从新的混淆矩阵读（`runs/persimmon_cls_v1/confusion_matrix_2026-10-05.png`）。
+> 需要重新从新的混淆矩阵读（`runs/classify/persimmon_cls_v1/confusion_matrix_2026-10-05.png`）。
 >
 > **材料里请一律用 88.89%，不要再用 84.44%。**
 
@@ -168,7 +168,7 @@ YOLO('models/persimmon_cls_v1/best.pt').val(data='dataset/dataset_persimmon', sp
 | 着色期 | ~88% |
 | 完熟 | ~85% |
 
-> 想要准确值，需要**非归一化的原始计数矩阵**：`runs/persimmon_cls_v1/confusion_matrix_2026-10-05.png`
+> 想要准确值，需要**非归一化的原始计数矩阵**：`runs/classify/persimmon_cls_v1/confusion_matrix_2026-10-05.png`
 > （同一目录下还有归一化版 `confusion_matrix_normalized_2026-10-05.png`），
 > 或者用 `metrics.confusion_matrix.matrix` 直接读。
 
@@ -338,12 +338,12 @@ val   16 张  →  100% 都是 1_unripe（未熟·青绿）
 
 | 图 | 路径 |
 |---|---|
-| 混淆矩阵 | `runs/persimmon_cls_v1/confusion_matrix.png` |
-| 归一化混淆矩阵 | `runs/persimmon_cls_v1/confusion_matrix_normalized.png` |
-| 训练曲线（loss + accuracy） | `runs/persimmon_cls_v1/results.png` |
-| 训练原始数据（可自己画图） | `runs/persimmon_cls_v1/results.csv` |
+| 混淆矩阵 | `runs/classify/persimmon_cls_v1/confusion_matrix.png` |
+| 归一化混淆矩阵 | `runs/classify/persimmon_cls_v1/confusion_matrix_normalized.png` |
+| 训练曲线（loss + accuracy） | `runs/classify/persimmon_cls_v1/results.png` |
+| 训练原始数据（可自己画图） | `runs/classify/persimmon_cls_v1/results.csv` |
 | 检测效果图（标注框） | `runs/detect_predict/*_det.jpg` |
-| ~~验证集预测对照~~ | 原来的 `runs/persimmon_cls_v1/val_batch*_pred.jpg` 已在 runs/ 清理中删除，**改看上面的混淆矩阵** |
+| ~~验证集预测对照~~ | 原来的 `runs/classify/persimmon_cls_v1/val_batch*_pred.jpg` 已在 runs/ 清理中删除，**改看上面的混淆矩阵** |
 
 > 混淆矩阵图里**中文可能显示成方块**（matplotlib 字体问题）。
 > 之前修过（`font.sans-serif = Microsoft YaHei`），但要**打开图确认一下**再放进材料。

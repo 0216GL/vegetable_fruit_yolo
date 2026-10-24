@@ -1,8 +1,6 @@
 # ============================================================================
 #  persimmon 后端配置
 # ============================================================================
-#  ⚠️ 有两处你必须自己改：数据库密码、以及确认数据库名
-# ============================================================================
 
 server:
   # 和前端 vite.config.js 里代理的目标端口一致，改了要两边一起改
@@ -20,10 +18,8 @@ spring:
     url: jdbc:mysql://localhost:3306/persimmon?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: root
 
-    # ⚠️⚠️ 改成你自己的 MySQL 密码
-    password: 改这里
+    password: 123456
 
-    # 连接池（HikariCP，Spring Boot 自带的，不用额外配）
     hikari:
       maximum-pool-size: 10
       connection-timeout: 30000
@@ -40,25 +36,46 @@ spring:
       file-size-threshold: 2MB
 
 # ============================================================================
+#  图片存储
+# ============================================================================
+#  mode: oss     → 传阿里云 OSS（默认）
+#  mode: local   → 存本机磁盘，离线演示兜底（改这一个词就能切，代码不用动）
+#
+#  ⚠️⚠️ AccessKey 千万不要提交到公开仓库！
+#      泄露 = 别人用你的账号上传/刷流量，账单算你的。
+#      推荐：set 环境变量，别写在这文件里
+#        set OSS_AK=你的AccessKeyId
+#        set OSS_SK=你的AccessKeySecret
+#      下面 ${OSS_AK:} 的意思是"读环境变量 OSS_AK，没有就留空"。
+# ============================================================================
+storage:
+  mode: oss
+
+  oss:
+    endpoint: oss-cn-beijing.aliyuncs.com      # 你的 bucket 在哪个地域就改哪个
+    access-key-id: ${OSS_AK:}
+    access-key-secret: ${OSS_SK:}
+    bucket: your-bucket-name                   # ← 改成你的 bucket 名
+    dir: taihang/captures/                     # 对象名前缀，带项目名免得和别人混
+    url-prefix:                                # 可选：绑了自定义域名/CDN 才填
+
+  local:
+    dir: D:/vegetable_fruit_yolo/data/images
+    url-prefix: /files/
+
+
+# ============================================================================
 #  MyBatis 配置
 # ============================================================================
 mybatis:
   configuration:
-    # ★★★ 这一行是必加的，不加会踩一个很难查的坑 ★★★
-    #
-    # 数据库列名是下划线风格（count_unripe），Java 字段是驼峰（countUnripe）。
-    # MyBatis 默认【不会】自动转换 —— 结果是字段全是 null，而且【不报错】。
-    #
-    # 这是新手最难查的一类 bug：接口能通、SQL 也没写错，就是查出来是空。
     map-underscore-to-camel-case: true
 
-  # 以后要用 XML 写复杂 SQL（比如那个 GROUP BY 汇总），放在这个目录下
   mapper-locations: classpath:mapper/*.xml
 
 # ============================================================================
 #  AI 服务（Python）
 # ============================================================================
-#  集中在这里，Python 服务换机器/换端口只改这一处
 ai:
   service:
     base-url: http://127.0.0.1:8001

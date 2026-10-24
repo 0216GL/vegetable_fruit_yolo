@@ -8,30 +8,6 @@ P0 —— Python 推理服务（FastAPI）
     GET  /                 临时测试页（浏览器里直接拖图试）
     GET  /docs              ★ FastAPI 自动生成的接口文档，答辩/联调时直接打开
 
-启动（★ 必须在【项目根目录】下执行，因为要 import ai 这个包）：
-    cd /d D:\vegetable_fruit_yolo
-    D:\Anaconda\envs\yolo\python.exe -m uvicorn ai.server.app:app --host 0.0.0.0 --port 8001
-（不再提供 .bat 启动脚本，上面两条命令就是完整的启动方式）
-
-【端口为什么是 8001 不是 8000】
-    这台机器上 8000 和 7000 被系统挡住了（WinError 10013），
-    实测 8001/8002/5001/3000/5173 都可用。
-    也刻意避开 8080（Spring Boot 默认）和 5173（Vite 默认），免得以后打架。
-    换端口：把上面命令末尾的 --port 8001 改成 8002 或 5001 即可（别再试 8000）。
-
-【几个关键设计】
-
-1. 模型在 startup 时【预加载】
-   模型冷启动要十几秒（我们实测 14.5 秒），如果每个请求都加载会慢到不可用。
-   所以启动时加载一次，之后所有请求复用（inference.py 里做了单例缓存）。
-
-2. 推理被一把锁串行化
-   只有一块 GPU，PyTorch 不是线程安全的。并发请求会在 inference.py 里排队，
-   而不是互相踩内存。这是单卡场景的正确取舍。
-
-3. 上传大小有限制
-   你的原图有 27 MP（单张 14 MB）。这里限制 MAX_UPLOAD_MB，
-   超了直接返回 413，不让它把内存吃爆。
 """
 
 import logging
@@ -41,7 +17,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -118,12 +94,16 @@ app.add_middleware(
 @app.get("/api/health", response_model=HealthResponse, tags=["系统"])
 def health():
     """健康检查。前端和容器探针都用它。"""
+    default = config.ACTIVE_MODEL
+    info = config.get_model_info(default)
     return HealthResponse(
         status="ok" if MODELS_READY else "degraded",
-        models_ready=inference.is_ready(),
+        models_ready=inference.is_ready(default),
         detail={
-            "detect": str(config.DETECT["weights"]),
-            "classify": str(config.get_model_info()["weights"]),
+            "detect": str(info.get("det")),
+            "classify": str(info["weights"]),
+            "default_species": default,
+            "supported_species": config.list_species(),
         },
     )
 
@@ -132,19 +112,31 @@ def health():
     "/api/predict",
     response_model=PredictResponse,
     tags=["识别"],
-    summary="上传一张图，返回柿子位置 + 成熟度",
+    summary="上传一张图，返回果实位置 + 成熟度（按品种路由）",
 )
-async def predict(file: UploadFile = File(..., description="图片文件")):
+async def predict(
+    file: UploadFile = File(..., description="图片文件"),
+    species: str = Form("persimmon", description="果品品种：persimmon / apple"),
+):
     """
-    上传一张图片，返回：
+    上传一张图片，按 `species` 指定的品种做识别，返回：
 
-    - `detections`：每个柿子的框坐标 + 检测置信度 + 成熟度 + 成熟度置信度
-    - `counts`：各类成熟度的数量统计
+    - `species`：本次用的品种
+    - `detections`：每个果实的框坐标 + 检测置信度 + 成熟度 + 成熟度置信度
+    - `counts`：各成熟度等级的数量统计（键跟着该品种的类别走）
     - `timing`：两层的耗时
 
-    注意：**即使一张柿子都没检测到，也返回 200**（`detections` 是空数组），
-    因为"图里没有柿子"是一个正常结果，不是错误。
+    注意：**即使一个果实都没检测到，也返回 200**（`detections` 是空数组），
+    因为"图里没有果实"是一个正常结果，不是错误。
     """
+    # ---- 校验品种 ----
+    supported = config.list_species()
+    if species not in supported:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的品种 {species!r}，可选：{supported}",
+        )
+
     # ---- 校验扩展名 ----
     suffix = Path(file.filename or "").suffix.lower()
     if suffix and suffix not in ALLOWED_SUFFIX:
@@ -172,17 +164,17 @@ async def predict(file: UploadFile = File(..., description="图片文件")):
     if frame is None:
         raise HTTPException(status_code=400, detail="图片解码失败（文件损坏或不是图片）")
 
-    # ---- 推理 ----
+    # ---- 推理（按品种路由到对应的检测 + 分类模型）----
     t0 = time.time()
-    out = inference.predict(frame)
+    out = inference.predict(frame, key=species)
     cost = (time.time() - t0) * 1000
 
     if not out["ok"]:
-        log.warning(f"{file.filename}  推理失败：{out['error']}")
+        log.warning(f"[{species}] {file.filename}  推理失败：{out['error']}")
         return JSONResponse(status_code=500, content=out)
 
     log.info(
-        f"{file.filename}  {out['image']['width']}x{out['image']['height']}  "
+        f"[{species}] {file.filename}  {out['image']['width']}x{out['image']['height']}  "
         f"检出 {len(out['detections'])} 个  "
         f"检测 {out['timing']['detect_ms']:.0f}ms + 分类 {out['timing']['classify_ms']:.0f}ms  "
         f"合计 {cost:.0f}ms"

@@ -10,7 +10,7 @@
  *
  * <p><b>一条规则：字段名用驼峰，MyBatis 会自动对上数据库的下划线。</b>
  * <pre>
- *   数据库  count_unripe        Java  countUnripe
+ *   数据库  region_name         Java  regionName（列表 VO 里）
  *   数据库  captured_at         Java  capturedAt
  * </pre>
  * 靠的是 {@code application.yaml} 里那行

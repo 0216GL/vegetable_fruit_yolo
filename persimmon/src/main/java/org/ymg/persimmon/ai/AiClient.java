@@ -1,7 +1,12 @@
 package org.ymg.persimmon.ai;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+// ★ Spring Boot 4 的默认 JSON 库换成了 Jackson 3，databind/core 的包名
+//   从 com.fasterxml.jackson 改成了 tools.jackson。所以这里必须用新包名，
+//   用旧的会报"程序包 com.fasterxml.jackson.databind 不存在"。
+//   （注意：注解那套 @JsonProperty / @JsonFormat 没改名，仍是
+//    com.fasterxml.jackson.annotation，见 AiPredictResponse 和 CaptureListItem。）
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -73,11 +78,13 @@ public class AiClient {
      * @param bytes    图片原始字节
      * @param filename 原始文件名。<b>不能省</b> —— Python 端靠它的后缀判断格式，
      *                 传 null 会被当成没有后缀。
-     * @return 识别结果（{@code detections} 可能为空数组，表示图里没有柿子，
+     * @param species  果品品种：{@code persimmon} 或 {@code apple}。
+     *                 Python 端据此选对应的检测模型 + 成熟度分类模型。
+     * @return 识别结果（{@code detections} 可能为空数组，表示图里没有果实，
      *         这<b>不是</b>错误）
      * @throws BizException AI 服务连不上，或推理失败
      */
-    public AiPredictResponse predict(byte[] bytes, String filename) {
+    public AiPredictResponse predict(byte[] bytes, String filename, String species) {
         long t0 = System.currentTimeMillis();
 
         // ---- 构造 multipart/form-data 请求体 ----
@@ -85,6 +92,8 @@ public class AiClient {
         // 因为 Python 端声明的是 file: UploadFile = File(...)
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new NamedByteArrayResource(bytes, filename));
+        // 品种也一起带上 —— Python 端是 species: str = Form("persimmon")
+        body.add("species", (species == null || species.isBlank()) ? "persimmon" : species);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);

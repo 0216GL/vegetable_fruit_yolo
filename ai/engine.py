@@ -1,5 +1,5 @@
 """
-推理核心 —— predict.py 和 camera.py 共同依赖的底座。
+推理核心 —— detect.py 和 server 共同依赖的底座。
 
 对外四个接口：
     is_ready(key=None)              -> bool        模型文件在不在
@@ -83,7 +83,7 @@ def load_model(key=None, verbose=True):
 # ==============================================================================
 def predict(source, key=None, threshold=None, topk=None, imgsz=None, verbose=True):
     """
-    source     图片路径（str / Path），或 numpy 数组（摄像头的一帧）
+    source     图片路径（str / Path），或 numpy 数组
     threshold  拒识阈值，None = 用该模型自己的（见 config.MODELS[*]["threshold"]）
     topk       返回前几名，None = 用 config.TOPK
     imgsz      输入尺寸，None = 用 config.IMGSZ

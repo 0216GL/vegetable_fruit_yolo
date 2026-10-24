@@ -10,7 +10,7 @@
 一个完整的系统，三块：
 
 ```
-  手机 / 摄像头
+  手机 / 网页
         │  拍照上传
         ▼
 ┌──────────────────┐     ┌────────────────────┐
@@ -110,11 +110,12 @@ npm run dev
 
 | 模型 | 任务 | 类别 | 指标 |
 |---|---|---|---|
-| `persimmon_det_v1` | 检测：找出柿子在哪儿 | 1 | mAP@0.5 = **90.87%** |
+| `persimmon_det_v2` | 检测：找出柿子在哪儿 | 1 | 近景 mAP@0.5 = **89.83%** / 远景 **52.87%** |
 | `persimmon_cls_v1` | 分类：判断成熟度（主任务） | 4 | top-1 = **88.89%** / top-5 = 100% |
-| `fruits_cls_v1` | 物种识别（对照实验） | 12 | top-1 = 97.95% |
+| `fruits_cls_v1` | 物种识别（品类扩展验证） | 12 | top-1 = 97.95% |
 
-> ⚠️ **上面是 2026-10-05 重测的数字，以此为准。**
+> ⚠️ 检测数字更新于 2026-10-17（补 11 张整树实拍后重训），分类仍是 2026-10-05 重测值。
+> 详细对比见 `docs/MODEL_REPORT.md`。
 > 检测的 **90.87%** 是 **2026-09-27 补小目标（远景）训练数据后重训**的结果，补数据前是 88.23%。
 > 旧版 README 里写的 84.44% 是**修正数据增强参数之前**那次的结果。
 > **完整的技术数据（含逐类指标、检测漏检问题、缺口清单）见 [`docs/TECH_DATA.md`](docs/TECH_DATA.md)。**
@@ -150,7 +151,6 @@ python -m ai.train_detect         :: 训练检测模型
 ```bat
 python -m ai.detect "D:\照片\柿子.jpg"    :: 单张图，两层推理
 python -m ai.detect "某个文件夹"           :: 整个文件夹
-python -m ai.detect                       :: 不带参数 = 开摄像头
 ```
 
 结果图存到 `runs/detect_predict/`。
@@ -217,7 +217,7 @@ ACTIVE_MODEL = "persimmon"     # 或 "species"
         ↑
   ┌─────┴──────┐
 detect.py     server/app.py       互不依赖
-（命令行/摄像头）（HTTP 接口 8001）
+（命令行/单图）（HTTP 接口 8001）
         ↑
    （以后）网页后端 / 小程序 / 检测模块 —— 直接 import inference 即可
 ```
@@ -259,7 +259,7 @@ vegetable_fruit_yolo/
 │   ├── config.py                  ★ 全部配置：模型注册表 / 阈值 / 中文类名
 │   ├── engine.py                  分类模型加载 + 推理
 │   ├── inference.py               ★ 两层推理核心（检测 → 裁剪 → 分类）
-│   ├── detect.py                  命令行：单图 / 文件夹 / 摄像头
+│   ├── detect.py                  命令行：单图 / 文件夹
 │   ├── train.py                   训练成熟度分类模型
 │   ├── train_detect.py            训练检测模型
 │   ├── add_to_dataset.py          往检测数据集加图/标注
@@ -315,7 +315,7 @@ vegetable_fruit_yolo/
 ├── weights/                     预训练权重（yolo11n.pt / yolo11n-cls.pt）
 ├── models/                      训练产物
 │   ├── persimmon_cls_v1/best.pt    ★ 成熟度分类（88.89%）
-│   ├── persimmon_det_v1/best.pt    ★ 检测（mAP@0.5 = 90.87%）
+│   ├── persimmon_det_v2/last.pt    ★ 检测（近景 89.83% / 远景 52.87%）
 │   └── fruits_cls_v1/best.pt       物种（97.95%）
 ├── runs/                        训练日志、曲线、混淆矩阵、检测结果图
 ├── artifacts/                   两轮实测报告与对照图（★ 建议看）
@@ -516,10 +516,10 @@ mAP@0.5 **88.23% → 90.87%**，整棵树从 **3 个框 → 61 个框（约 30%�
 
 | 脚本 | 作用 | 会不会训练 |
 |---|---|---|
-| `config.py` | 配置中心：模型注册表、阈值、摄像头参数 | ❌ |
+| `config.py` | 配置中心：模型注册表、阈值、中文类名 | ❌ |
 | `engine.py` | 分类模型加载 + 推理 | ❌ |
 | `inference.py` | **两层推理核心**（检测 + 分类），`detect.py` 和 `server/` 都调它 | ❌ |
-| `detect.py` | 命令行：单图 / 文件夹 / 摄像头 | ❌ 只加载 |
+| `detect.py` | 命令行：单图 / 文件夹 | ❌ 只加载 |
 | `train.py` | 训练成熟度分类模型 | ✅ |
 | `train_detect.py` | 训练检测模型 | ✅ |
 | `add_to_dataset.py` | 把新图片加进数据集 | ❌ |
@@ -527,14 +527,11 @@ mAP@0.5 **88.23% → 90.87%**，整棵树从 **3 个框 → 61 个框（约 30%�
 
 **训练一次，永久使用** —— `models/*/best.pt` 就是模型的全部状态。
 
-**起服务、开摄像头——两条命令，都必须在项目根目录执行：**
+**起服务——一条命令，必须在项目根目录执行：**
 
 ```bat
 :: 起 AI 服务（端口必须 8001：8000/7000 被系统占用，8080/5173 留给后端和前端）
 D:\Anaconda\envs\yolo\python.exe -m uvicorn ai.server.app:app --host 0.0.0.0 --port 8001
-
-:: 开摄像头实时识别
-D:\Anaconda\envs\yolo\python.exe -m ai.detect
 ```
 
 必须用 conda 环境的绝对路径 `D:\Anaconda\envs\yolo\python.exe` ——
@@ -573,7 +570,7 @@ PATH 里的 `python` 是微软商店的占位符，会**静默失败**（不报�
 - [ ] 比赛材料（商业计划书、PPT、技术报告）
 
 **明确不做：** 登录与鉴权、病虫害识别、多地块管理
-（**边缘设备部署不在此列** —— 它是二期目标，见 `PRODUCT.md` 与 `docs/EDGE_DEPLOY.md`）
+（**边缘设备部署不在此列** —— 它是二期目标，**已暂停**）
 
 ---
 

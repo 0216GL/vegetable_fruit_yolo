@@ -17,22 +17,6 @@ import java.time.Duration;
  * <p><b>为什么要自定义超时：</b>RestTemplate 默认<b>没有超时</b>，会一直等下去。
  * Python 服务一卡死，Java 的请求线程就被永久占住，请求一多线程池耗尽，
  * 整个后端跟着假死。<b>给所有外部调用设超时是硬性要求。</b>
- *
- * <hr>
- *
- * <p><b>⚠️ 这是我整份框架里最没把握的一处。</b>
- *
- * <p>你用的是 Spring Boot 4.0（对应 Spring Framework 7），
- * 而我熟悉的是 3.x / Framework 6。Boot 3.4 之后
- * {@code RestTemplateBuilder.setConnectTimeout(...)} 这类写法被标记为过时，
- * 官方建议改用 {@code ClientHttpRequestFactorySettings}。
- * 到了 7.0 那些老方法**是否还存在，我不能确定**。
- *
- * <p>所以我选了相对底层、变化较小的 {@link SimpleClientHttpRequestFactory}
- * 来设超时，绕开 {@code RestTemplateBuilder} 的 API 变动。
- *
- * <p><b>如果这段编译不过</b>，把报错整段贴出来 —— 大概率是某个方法签名改了，
- * 一眼就能看出来怎么改。别自己猜。
  */
 @Configuration
 public class RestTemplateConfig {
