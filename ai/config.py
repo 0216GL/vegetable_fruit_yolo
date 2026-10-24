@@ -182,7 +182,7 @@ DETECT = {
     #    更看重"框得准"；而远景整树场景看重"找得到"，实测 last.pt 更好：
     #        远景测试集 mAP50    best 47.28%   last 52.87%
     #        远景召回           best 50.45%   last 57.66%
-    #    近景验证集 marginally 差 0.6 个点，可接受。详见 docs/MODEL_REPORT.md
+    #    近景验证集 marginally 差 0.6 个点，可接受。
     "weights": ROOT / "models" / "persimmon_det_v2" / "last.pt",
 
     "dataset": ROOT / "dataset" / "dataset_persimmon_det",  # 里面是 images/ + labels/

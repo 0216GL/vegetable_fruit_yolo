@@ -27,13 +27,23 @@ Ultralytics/
 .mplcache/
 dataset/**/*.cache
 
-# ---------- 大数据集：不进仓库 ----------
-# dataset/dataset_persimmon/ 约 191 MB（平均 888 KB/张，手机截图 + 实拍原图），
-# 提交后 clone 会很慢，所以排除。
-# ⚠️ 原始分类图片（源目录 images/）已不在本机，此数据集【无法再重建】，勿删。
-# 注意：只忽略图片本身，保留 classes.txt（标签编号顺序，体积可忽略）
-dataset/dataset_persimmon/*
-!dataset/dataset_persimmon/classes.txt
+# ---------- 数据集：一律不进仓库 ----------
+# 结论：dataset/ 下面**全部不上传**（图片 + 标注 + 划分文件）。
+#
+# 为什么整目录忽略：以前是逐个目录写规则，结果 dataset_apple_det（6755 个文件）、
+# dataset_apple_ripeness、dataset_test 这些没被覆盖，git 一直把它们列成"未跟踪"，
+# 一打开 VS 就是几千条"未进行版本管理"的提示，真正要提交的代码反而被淹了。
+#
+# 只白名单保留 classes.txt（标签编号顺序，几行字，别人复现时要看）。
+# 真要给别人数据集：单独压缩包 + 网盘/OSS，别塞进 git 历史（塞了就删不干净）。
+#
+# ⚠️ 写法注意：必须是 dataset/**（匹配所有层级的文件），不能写 dataset/*。
+#    dataset/*     只匹配第一层目录；再配 !dataset/**/ 放回子目录后，里面的文件就没人忽略了，
+#                  等于白写（我第一次就踩了这个坑）。
+dataset/**
+!dataset/**/
+!dataset/classes.txt
+!dataset/**/classes.txt
 
 # ---------- 实地采集的原始照片：不进仓库 ----------
 # 2026-10-04 太行山采集的手机原图，单张 3-5 MB、100 多张，
@@ -49,6 +59,9 @@ runs/classify/
 runs/predict*/
 runs/camera_snapshots/
 runs/camera_test.jpg
+
+# 19 张模型对比图共 38 MB（每张是手机原图），只在本机用来写报告，不进仓库
+runs/detect_compare/
 
 # ---------- 本地临时文件 ----------
 _tmp_*
@@ -66,25 +79,21 @@ Desktop.ini
 
 # ==============================================================================
 #  以下内容是【故意上传】的，不作忽略：
-#    dataset/dataset_fruit_vegetable/   物种数据集 28 MB（12 类，clone 下来要能直接训练）
-#    dataset/dataset_persimmon_det/     检测数据集 108 张（92 train + 16 val）图 + YOLO 标注，随仓库上传
-#    weights/yolo11n-cls.pt              预训练权重 5.5 MB（github.com 域名解析被污染，
-#                                        放进仓库省得别人下不来）
-#    models/fruits_cls_v1/best.pt        物种模型（97.95%）
-#    models/persimmon_cls_v1/best.pt     柿果成熟度模型（88.89%）
-#    models/persimmon_det_v1/best.pt     检测模型（mAP@0.5 = 90.87%），以前漏了，现在也随仓库上传
-#    dataset/dataset_persimmon/classes.txt   标签编号顺序（0=1_unripe … 3=4_full）
-#    *.py / README.md                    代码本体
+#    models/*/best.pt                    各品种检测/分类模型权重（几 MB，clone 下来要能直接跑）
+#    weights/yolo11n*.pt                  预训练底座（github.com 域名解析被污染，放进仓库省得别人下不来）
+#    frontend/                            三个前端（web / web-user / web-admin）
+#    persimmon/                           Java 后端
+#    ai/                                  Python 两层推理 + FastAPI
+#    *.py / README.md                     代码本体
 #
 #  以下内容【故意不上传】：
-#    dataset/dataset_persimmon/          柿子数据集 191 MB（train 353 / val 90）
-#                                        划分已固定，属一次性产物，源图已丢失，不可重建
-#    runs/                               **不是整个目录都不上传**。只忽略上面列出的那几类噪音：
-#                                        train_batch*.jpg / val_batch*.jpg / **/weights/ /
-#                                        classify/ / predict*/ / camera_snapshots/ / camera_test.jpg
-#                                        其余【会上传】：训练曲线（results.png、results.csv）、
-#                                        混淆矩阵（`runs/classify/` 下的那 2 张除外，见上）、PR/F1 曲线、detect/*/、
-#                                        detect_predict/*_det.jpg
+#    dataset/                             所有数据集（图片 + 标注），只保留 classes.txt
+#    runs/**/weights/                    ★ 训练产物里的权重（模型已拷到 models/，这里不重复）
+#    runs/**/train_batch*.jpg 等         训练批图噪音
+#    model_exp/、_tmp_*、*.bak            本地临时产物
+#    data/images/                        storage.mode=local 时落盘的图片
+#    runs/classify/                      混淆矩阵属于中间产物，目录整体忽略
+#    其余 runs/ 训练曲线（results.png/csv、PR/F1 曲线、detect/*/）**会上传**
 # ==============================================================================
 
 # 本机图片存储（storage.mode=local 时落盘，别进仓库）
